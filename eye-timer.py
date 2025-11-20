@@ -6,9 +6,10 @@ import webbrowser
 from flask import Flask, render_template_string, send_from_directory
 
 # Configuration
-HOST = 'localhost'
-PORT = 5000
-DEBUG = False
+# Allow environment overrides so the app can run inside containers and CI
+HOST = os.environ.get('HOST', '0.0.0.0')
+PORT = int(os.environ.get('PORT', str(5000)))
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
 app = Flask(__name__)
 
