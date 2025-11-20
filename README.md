@@ -2,6 +2,9 @@
 
 Eye Timer is a productivity timer application designed to help users maintain focus and take regular breaks. It includes customizable settings for focus time, break time, and notification sounds.
 
+## Disclaimer
+This application was built entirely using AI tools and assistance. While every effort has been made to ensure its functionality and reliability, users are encouraged to review the code and adapt it to their specific needs.
+
 ## Features
 - Customizable focus and break durations.
 - Audio notifications with adjustable repeat count and delay.
