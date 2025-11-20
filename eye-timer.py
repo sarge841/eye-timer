@@ -311,6 +311,11 @@ HTML_TEMPLATE = """
             timeLeft: 20 * 60,
             totalTime: 20 * 60,
             timerId: null,
+            // Timestamp-based timing to avoid background throttling issues
+            startTimeMs: null,
+            endTimeMs: null,
+            remainingMs: 20 * 60 * 1000,
+            finished: false,
             
             settings: {
                 focusTime: 20 * 60,
@@ -473,17 +478,35 @@ HTML_TEMPLATE = """
                 }
             }
 
-            appState.timeLeft = appState.totalTime;
+            // Initialize timestamps for the new phase
+            appState.totalTime = appState.isFocus ? appState.settings.focusTime : appState.settings.breakTime;
+            appState.remainingMs = appState.totalTime * 1000;
+            appState.startTimeMs = Date.now();
+            appState.endTimeMs = appState.startTimeMs + appState.remainingMs;
+            appState.timeLeft = Math.ceil(appState.remainingMs / 1000);
+            appState.finished = false;
             updateUI();
         };
 
         const tick = () => {
-            if (appState.timeLeft > 0) {
-                appState.timeLeft--;
-                updateUI();
-            } else {
+            // If no endTime set, nothing to do
+            if (!appState.endTimeMs) return;
+
+            // Compute remaining ms from wall-clock time so background throttling doesn't break logic
+            let remainingMs = appState.endTimeMs - Date.now();
+            // If we've missed the deadline (user was away), advance phases until caught up
+            while (remainingMs <= 0 && !appState.finished) {
+                // Mark finished for this phase to avoid infinite loop if switchPhase doesn't advance time
+                appState.finished = true;
                 switchPhase();
+                // After switching phase, recompute remainingMs for the new phase
+                if (!appState.endTimeMs) return;
+                remainingMs = appState.endTimeMs - Date.now();
             }
+
+            appState.remainingMs = Math.max(0, remainingMs);
+            appState.timeLeft = Math.max(0, Math.ceil(appState.remainingMs / 1000));
+            updateUI();
         };
 
         const toggleTimer = () => {
@@ -499,7 +522,10 @@ HTML_TEMPLATE = """
             } else {
                 // Request notification permission on first start
                 if (Notification.permission !== "granted") Notification.requestPermission();
-
+                // Initialize timestamps based on remainingMs (preserve paused remaining time)
+                appState.startTimeMs = Date.now();
+                appState.endTimeMs = appState.startTimeMs + (appState.remainingMs || (appState.totalTime * 1000));
+                // Start the main updater (timestamp-based). Frequency isn't critical because tick uses wall-clock.
                 appState.timerId = setInterval(tick, 1000);
                 appState.isRunning = true;
                 els.playIcon.className = "fa-solid fa-pause text-xl";
@@ -515,6 +541,10 @@ HTML_TEMPLATE = """
             appState.isFocus = true; // Always reset to focus
             appState.totalTime = appState.settings.focusTime;
             appState.timeLeft = appState.totalTime;
+            appState.remainingMs = appState.totalTime * 1000;
+            appState.startTimeMs = Date.now();
+            appState.endTimeMs = appState.startTimeMs + appState.remainingMs;
+            appState.finished = false;
             
             els.playIcon.className = "fa-solid fa-play text-xl pl-1";
             els.playText.textContent = "Start";
@@ -611,6 +641,24 @@ HTML_TEMPLATE = """
         // Init
         loadSettings(); // Load from storage
         resetTimer();   // Initialize with loaded settings
+
+        // If page visibility changes (user returns), recompute immediately
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) tick();
+        });
+
+        // rAF loop for smooth progress when visible; setInterval fallback handles backgrounded checks
+        const rAFLoop = () => {
+            if (appState.isRunning && !document.hidden && appState.endTimeMs) {
+                // Light-weight update for progress bar and small visual smoothness
+                const remainingMs = Math.max(0, appState.endTimeMs - Date.now());
+                const remainingSec = Math.ceil(remainingMs / 1000);
+                const pct = (remainingSec / appState.totalTime) * 100;
+                els.progressBar.style.width = `${pct}%`;
+            }
+            requestAnimationFrame(rAFLoop);
+        };
+        requestAnimationFrame(rAFLoop);
 
     </script>
 </body>
