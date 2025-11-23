@@ -2,14 +2,18 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 # Mock appState and audio for testing
+import json
+
+
 class MockAppState:
     def __init__(self):
         self.settings = {
-            'focusTime': 20 * 60,  # Corrected to 20 minutes
+            'focusTime': 20 * 60,
             'breakTime': 20,
             'soundType': 'chime',
             'volume': 50,
             'notificationsEnabled': True,
+            'reverseOnBreakEnd': False,
             'repeatCount': 1,
             'repeatDelay': 1
         }
@@ -17,190 +21,169 @@ class MockAppState:
         self.timeLeft = self.settings['focusTime']
         self.totalTime = self.settings['focusTime']
 
-appState = MockAppState()
-
-# Directly mock audio.play in the test
-def mock_audio_play(repeat_count, repeat_delay):
-    print(f"Playing sound {repeat_count} times with {repeat_delay}s delay.")
-
-# Replace patching with direct assignment
-audio = MagicMock()
-audio.play = mock_audio_play
-
-# Update MockDocument to simulate title updates
-def updateUI():
-    document.title = "25-30-20"
-    document.elements['h1.font-bold'].textContent = "25-30-20"
-    document.elements['.text-center p'].textContent = "Look 20 feet away for 30 seconds every 25 minutes."
-
-def switchPhase():
-    appState.isFocus = not appState.isFocus
-    appState.timeLeft = appState.settings['breakTime'] if not appState.isFocus else appState.settings['focusTime']
-
-# Mock document for rendering tests
-class MockDocument:
-    def __init__(self):
-        self.title = ""
-        self.elements = {
-            'h1.font-bold': MockElement(""),
-            '.text-center p': MockElement("")
-        }
-
-    def querySelector(self, selector):
-        return self.elements.get(selector, MockElement(""))
-
-class MockElement:
-    def __init__(self, textContent):
-        self.textContent = textContent
-
-document = MockDocument()
 
 class TestEyeTimer(unittest.TestCase):
-
     def setUp(self):
-        # Mock browser and notification APIs if needed
-        pass
+        self.appState = MockAppState()
 
-    def test_settings(self):
-        """Test various settings like focus time, break time, repeat count, and repeat delay."""
-        # Explicitly set focusTime to ensure consistency
-        appState.settings['focusTime'] = 20 * 60
-        # Explicitly set breakTime to ensure consistency
-        appState.settings['breakTime'] = 20
+    def test_default_settings_include_reverse(self):
+        """Ensure the new reverseOnBreakEnd setting exists and defaults to False."""
+        self.assertIn('reverseOnBreakEnd', self.appState.settings)
+        self.assertFalse(self.appState.settings['reverseOnBreakEnd'])
 
-        # Validate default settings
-        self.assertEqual(appState.settings['focusTime'], 20 * 60)
-        self.assertEqual(appState.settings['breakTime'], 20)
-        self.assertEqual(appState.settings['repeatCount'], 1)
-        self.assertEqual(appState.settings['repeatDelay'], 1)
+    def test_toggle_reverse_setting(self):
+        """Toggling the reverse setting changes the stored value."""
+        self.appState.settings['reverseOnBreakEnd'] = True
+        self.assertTrue(self.appState.settings['reverseOnBreakEnd'])
 
-    def test_duration_rendering(self):
-        """Test that durations render properly in titles, H1, and subtext."""
-        # Mock appState and call updateUI
-        appState.settings['focusTime'] = 25 * 60
-        appState.settings['breakTime'] = 30
-        updateUI()
+    def test_phase_switch_updates_state(self):
+        """Simple phase switch flips focus state and updates timeLeft appropriately."""
+        # Simulate end of focus
+        self.appState.isFocus = True
+        # switch to break
+        self.appState.isFocus = not self.appState.isFocus
+        if not self.appState.isFocus:
+            self.appState.timeLeft = self.appState.settings['breakTime']
+        self.assertFalse(self.appState.isFocus)
+        self.assertEqual(self.appState.timeLeft, self.appState.settings['breakTime'])
 
-        # Validate rendered content
-        self.assertIn("25-30-20", document.title)
-        self.assertIn("25-30-20", document.querySelector('h1.font-bold').textContent)
-        self.assertIn("Look 20 feet away for 30 seconds every 25 minutes.", document.querySelector('.text-center p').textContent)
+    def test_audio_play_reverse_flag(self):
+        """When transitioning into focus (break ended) and reverse is enabled, audio.play receives reverse=True."""
+        app = MockAppState()
+        app.settings['reverseOnBreakEnd'] = True
+        app.settings['repeatCount'] = 2
+        app.settings['repeatDelay'] = 3
 
-    def test_core_functionality(self):
-        """Test core functionality like timer transitions, sound playback, and notifications."""
-        appState.timeLeft = 0
-        switchPhase()
+        # Case A: currently on break, so next phase is focus -> reverse should be True
+        app.isFocus = False
+        calls = []
 
-        # Validate phase switch
-        self.assertFalse(appState.isFocus)
-        self.assertEqual(appState.timeLeft, appState.settings['breakTime'])
+        class MockAudio:
+            def play(self, repeatCount, repeatDelay, reverse=False):
+                calls.append((int(repeatCount), int(repeatDelay), bool(reverse)))
 
-    def tearDown(self):
-        # Clean up mocks or reset state
-        pass
+        audio = MockAudio()
+        nextIsFocus = not app.isFocus
+        reverseFlag = nextIsFocus and app.settings['reverseOnBreakEnd']
+        audio.play(app.settings['repeatCount'], app.settings['repeatDelay'], reverseFlag)
+        self.assertEqual(calls, [(2, 3, True)])
 
-if __name__ == "__main__":
-    unittest.main()
-import unittest
-from unittest.mock import patch, MagicMock
+        # Case B: currently on focus, so next phase is break -> reverse should be False even if enabled
+        app.isFocus = True
+        calls.clear()
+        nextIsFocus = not app.isFocus
+        reverseFlag = nextIsFocus and app.settings['reverseOnBreakEnd']
+        audio.play(app.settings['repeatCount'], app.settings['repeatDelay'], reverseFlag)
+        self.assertEqual(calls, [(2, 3, False)])
 
-# Mock appState and audio for testing
-class MockAppState:
-    def __init__(self):
-        self.settings = {
-            'focusTime': 20 * 60,  # Corrected to 20 minutes
-            'breakTime': 20,
-            'soundType': 'chime',
-            'volume': 50,
-            'notificationsEnabled': True,
-            'repeatCount': 1,
-            'repeatDelay': 1
+    def test_settings_serialization_roundtrip(self):
+        """Settings including reverseOnBreakEnd should serialize/deserialize cleanly to JSON."""
+        s = self.appState.settings
+        s['reverseOnBreakEnd'] = True
+        s['repeatCount'] = 4
+        s['repeatDelay'] = 2
+
+        blob = json.dumps(s)
+        loaded = json.loads(blob)
+
+        # JSON roundtrip should preserve keys and values (booleans become booleans)
+        self.assertIn('reverseOnBreakEnd', loaded)
+        self.assertTrue(loaded['reverseOnBreakEnd'])
+        self.assertEqual(int(loaded['repeatCount']), 4)
+        self.assertEqual(int(loaded['repeatDelay']), 2)
+
+    def _mimic_load_settings(self, saved_blob, app):
+        """Mimic the JS loadSettings mapping into appState.settings.
+
+        The frontend saves some fields as strings (focus minutes, break seconds,
+        repeat counts/delays). This helper parses those and applies to the
+        provided app object's settings dict similar to the JS logic.
+        """
+        data = json.loads(saved_blob)
+
+        if 'focus' in data:
+            try:
+                app.settings['focusTime'] = int(data['focus']) * 60
+            except Exception:
+                pass
+
+        if 'break' in data:
+            try:
+                app.settings['breakTime'] = int(data['break'])
+            except Exception:
+                pass
+
+        if 'sound' in data:
+            app.settings['soundType'] = data['sound']
+
+        if 'volume' in data:
+            try:
+                app.settings['volume'] = int(data['volume'])
+            except Exception:
+                pass
+
+        if 'repeatCount' in data:
+            try:
+                app.settings['repeatCount'] = int(data['repeatCount'])
+            except Exception:
+                pass
+
+        if 'repeatDelay' in data:
+            try:
+                app.settings['repeatDelay'] = int(data['repeatDelay'])
+            except Exception:
+                pass
+
+        if 'notificationsEnabled' in data:
+            # JS used nullish coalescing; treat explicit boolean values
+            app.settings['notificationsEnabled'] = bool(data['notificationsEnabled'])
+
+        if 'reverse' in data:
+            app.settings['reverseOnBreakEnd'] = bool(data['reverse'])
+
+        # Theme is not part of app settings in the Python model; ignore
+
+        return app
+
+    def test_persistence_load_mapping(self):
+        """Simulate saved localStorage blob and ensure fields map into settings."""
+        saved = {
+            'focus': '15',
+            'break': '25',
+            'sound': 'harp',
+            'volume': '80',
+            'repeatCount': '3',
+            'repeatDelay': '2',
+            'theme': 'dark',
+            'notificationsEnabled': False,
+            'reverse': True
         }
-        self.isFocus = True
-        self.timeLeft = self.settings['focusTime']
-        self.totalTime = self.settings['focusTime']
+        blob = json.dumps(saved)
+        app = MockAppState()
+        self._mimic_load_settings(blob, app)
 
-appState = MockAppState()
+        self.assertEqual(app.settings['focusTime'], 15 * 60)
+        self.assertEqual(app.settings['breakTime'], 25)
+        self.assertEqual(app.settings['soundType'], 'harp')
+        self.assertEqual(app.settings['volume'], 80)
+        self.assertEqual(app.settings['repeatCount'], 3)
+        self.assertEqual(app.settings['repeatDelay'], 2)
+        self.assertFalse(app.settings['notificationsEnabled'])
+        self.assertTrue(app.settings['reverseOnBreakEnd'])
 
-# Directly mock audio.play in the test
-def mock_audio_play(repeat_count, repeat_delay):
-    print(f"Playing sound {repeat_count} times with {repeat_delay}s delay.")
+    def test_persistence_missing_fields_do_not_clobber(self):
+        """When saved blob lacks keys, existing settings are preserved."""
+        partial = {'focus': '10'}
+        blob = json.dumps(partial)
+        app = MockAppState()
+        # mutate one to detect preservation
+        app.settings['soundType'] = 'digital'
+        self._mimic_load_settings(blob, app)
 
-# Replace patching with direct assignment
-audio = MagicMock()
-audio.play = mock_audio_play
+        self.assertEqual(app.settings['focusTime'], 10 * 60)
+        # unchanged values remain
+        self.assertEqual(app.settings['soundType'], 'digital')
 
-# Update MockDocument to simulate title updates
-def updateUI():
-    document.title = "25-30-20"
-    document.elements['h1.font-bold'].textContent = "25-30-20"
-    document.elements['.text-center p'].textContent = "Look 20 feet away for 30 seconds every 25 minutes."
 
-def switchPhase():
-    appState.isFocus = not appState.isFocus
-    appState.timeLeft = appState.settings['breakTime'] if not appState.isFocus else appState.settings['focusTime']
-
-# Mock document for rendering tests
-class MockDocument:
-    def __init__(self):
-        self.title = ""
-        self.elements = {
-            'h1.font-bold': MockElement(""),
-            '.text-center p': MockElement("")
-        }
-
-    def querySelector(self, selector):
-        return self.elements.get(selector, MockElement(""))
-
-class MockElement:
-    def __init__(self, textContent):
-        self.textContent = textContent
-
-document = MockDocument()
-
-class TestEyeTimer(unittest.TestCase):
-
-    def setUp(self):
-        # Mock browser and notification APIs if needed
-        pass
-
-    def test_settings(self):
-        """Test various settings like focus time, break time, repeat count, and repeat delay."""
-        # Explicitly set focusTime to ensure consistency
-        appState.settings['focusTime'] = 20 * 60
-        # Explicitly set breakTime to ensure consistency
-        appState.settings['breakTime'] = 20
-
-        # Validate default settings
-        self.assertEqual(appState.settings['focusTime'], 20 * 60)
-        self.assertEqual(appState.settings['breakTime'], 20)
-        self.assertEqual(appState.settings['repeatCount'], 1)
-        self.assertEqual(appState.settings['repeatDelay'], 1)
-
-    def test_duration_rendering(self):
-        """Test that durations render properly in titles, H1, and subtext."""
-        # Mock appState and call updateUI
-        appState.settings['focusTime'] = 25 * 60
-        appState.settings['breakTime'] = 30
-        updateUI()
-
-        # Validate rendered content
-        self.assertIn("25-30-20", document.title)
-        self.assertIn("25-30-20", document.querySelector('h1.font-bold').textContent)
-        self.assertIn("Look 20 feet away for 30 seconds every 25 minutes.", document.querySelector('.text-center p').textContent)
-
-    def test_core_functionality(self):
-        """Test core functionality like timer transitions, sound playback, and notifications."""
-        appState.timeLeft = 0
-        switchPhase()
-
-        # Validate phase switch
-        self.assertFalse(appState.isFocus)
-        self.assertEqual(appState.timeLeft, appState.settings['breakTime'])
-
-    def tearDown(self):
-        # Clean up mocks or reset state
-        pass
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

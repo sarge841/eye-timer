@@ -110,6 +110,7 @@ HTML_TEMPLATE = """
                                 <option value="chime">Gentle Chime</option>
                                 <option value="digital">Digital Beep</option>
                                 <option value="harp">Harp Flow</option>
+                                <option value="hd2">Menacing (Kinda quiet)</option>
                             </select>
                             
                             <!-- TEST SOUND BUTTON -->
@@ -150,10 +151,18 @@ HTML_TEMPLATE = """
 
                     <!-- Enable Notifications Toggle -->
                     <div class="flex items-center justify-between pt-2">
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Enable Notifications</label>
+                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Enable Desktop Notifications</label>
                         <!-- Independent toggle (not theme-dependent) -->
                         <button id="notification-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-brand-600">
                             <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-7 transition-all duration-300 shadow-sm"></div>
+                        </button>
+                    </div>
+
+                    <!-- Reverse Sound On Break End Toggle -->
+                    <div class="flex items-center justify-between pt-2">
+                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Reverse Sound On Break End</label>
+                        <button id="reverse-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-slate-300">
+                            <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-all duration-300 shadow-sm"></div>
                         </button>
                     </div>
                 </div>
@@ -258,7 +267,7 @@ HTML_TEMPLATE = """
                 }
             }
 
-            play(repeatCount = 1, repeatDelay = 1) {
+            play(repeatCount = 1, repeatDelay = 1, reverse = false) {
                 this.resume();
                 const playSound = (count) => {
                     if (count <= 0) return;
@@ -267,16 +276,67 @@ HTML_TEMPLATE = """
                     gainNode.gain.value = this.volume;
                     gainNode.connect(this.ctx.destination);
 
-                    if (this.type === 'chime') {
-                        this.playOscillator(660, 'sine', t, 0.1, gainNode);
-                        this.playOscillator(880, 'sine', t + 0.15, 0.8, gainNode);
-                    } else if (this.type === 'digital') {
-                        this.playOscillator(800, 'square', t, 0.1, gainNode);
-                        this.playOscillator(800, 'square', t + 0.15, 0.1, gainNode);
-                    } else if (this.type === 'harp') {
-                        [440, 554, 659, 880].forEach((freq, i) => {
-                            this.playOscillator(freq, 'triangle', t + (i * 0.1), 1.5, gainNode);
-                        });
+                    if (!reverse) {
+                        if (this.type === 'chime') {
+                            this.playOscillator(660, 'sine', t, 0.1, gainNode);
+                            this.playOscillator(880, 'sine', t + 0.15, 0.8, gainNode);
+                        } else if (this.type === 'digital') {
+                            this.playOscillator(800, 'square', t, 0.1, gainNode);
+                            this.playOscillator(800, 'square', t + 0.15, 0.1, gainNode);
+                        } else if (this.type === 'harp') {
+                            [440, 554, 659, 880].forEach((freq, i) => {
+                                this.playOscillator(freq, 'triangle', t + (i * 0.1), 1.5, gainNode);
+                            });
+                        } else if (this.type === 'hd2') {
+                            // Start with low sound and build up
+                            const delay = 1.25;
+                            this.playOscillator(55, 'triangle', t, delay + 1, gainNode);
+                            
+                            const step1 = 5;
+                            const step1duration = 0.75;
+                            const step2duration = 0.75;
+                            const shape = 'triangle';
+                            [110, 117, 110, 131, 123, 117, 131, 123].forEach((freq, i) => {
+                            // [220, 233, 220, 262, 247, 233, 262, 247].forEach((freq, i) => { // higher octave
+                                if (i <= step1) {
+                                    this.playOscillator(freq, shape, t + delay + (i * 0.20), step1duration, gainNode);
+                                } else {
+                                    this.playOscillator(freq, shape, t + delay + ((i - step1) * 0.10) + (step1 * 0.20), step2duration, gainNode);
+                                }
+                            });
+                        }
+                    } else {
+                        // Reverse playback: invert the sequence/timing for a reverse effect
+                        if (this.type === 'chime') {
+                            // Play the higher tone first, then the lower with reversed timing
+                            this.playOscillator(880, 'sine', t, 0.1, gainNode);
+                            this.playOscillator(660, 'sine', t + 0.15, 0.8, gainNode);
+                        } else if (this.type === 'digital') {
+                            // Longer beep first then short beep
+                            this.playOscillator(800, 'square', t, 0.1, gainNode);
+                            this.playOscillator(800, 'square', t + 0.2, 0.15, gainNode);
+                        } else if (this.type === 'harp') {
+                            // Play the harp notes in reverse order
+                            [880, 659, 554, 440].forEach((freq, i) => {
+                                this.playOscillator(freq, 'triangle', t + (i * 0.1), 1.5, gainNode);
+                            });
+                        } else if (this.type === 'hd2') {
+                            // Start with low sound and build up
+                            const delay = 1.25;
+                            this.playOscillator(55, 'triangle', t, delay + 1, gainNode);
+                            
+                            const step1 = 4;
+                            const step1duration = 0.75;
+                            const step2duration = 0.75;
+                            const shape = 'triangle';
+                            [110, 117, 110, 131, 123, 117, 110].forEach((freq, i) => {
+                                if (i <= step1) {
+                                    this.playOscillator(freq, shape, t + delay + (i * 0.20), step1duration, gainNode);
+                                } else {
+                                    this.playOscillator(freq, shape, t + delay + ((i - step1) * 0.10) + (step1 * 0.20), step2duration, gainNode);
+                                }
+                            });
+                        }
                     }
 
                     setTimeout(() => playSound(count - 1), repeatDelay * 1000);
@@ -323,6 +383,7 @@ HTML_TEMPLATE = """
                 soundType: 'chime',
                 volume: 50,
                 notificationsEnabled: true,
+                reverseOnBreakEnd: false,
                 repeatCount: 1, // Default x
                 repeatDelay: 1  // Default y
             }
@@ -349,6 +410,7 @@ HTML_TEMPLATE = """
                 volume: document.getElementById('volume-input'),
                 volDisplay: document.getElementById('volume-val'),
                 theme: document.getElementById('theme-toggle'),
+                reverse: document.getElementById('reverse-toggle'),
                 testBtn: document.getElementById('btn-test-sound'),
                 repeatCount: document.getElementById('repeat-count'),
                 repeatDelay: document.getElementById('repeat-delay')
@@ -362,6 +424,7 @@ HTML_TEMPLATE = """
                 break: els.inputs.break.value,
                 sound: els.inputs.sound.value,
                 volume: els.inputs.volume.value,
+                reverse: appState.settings.reverseOnBreakEnd,
                 repeatCount: els.inputs.repeatCount.value,
                 repeatDelay: els.inputs.repeatDelay.value,
                 theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
@@ -420,6 +483,22 @@ HTML_TEMPLATE = """
                     notifKnob.classList.remove('left-7');
                     notifKnob.classList.add('left-1');
                 }
+
+                // Apply Reverse Toggle
+                const revBtn = document.getElementById('reverse-toggle');
+                const revKnob = revBtn.querySelector('div');
+                appState.settings.reverseOnBreakEnd = data.reverse ?? false;
+                if (appState.settings.reverseOnBreakEnd) {
+                    revBtn.classList.remove('bg-slate-300');
+                    revBtn.classList.add('bg-brand-600');
+                    revKnob.classList.remove('left-1');
+                    revKnob.classList.add('left-7');
+                } else {
+                    revBtn.classList.add('bg-slate-300');
+                    revBtn.classList.remove('bg-brand-600');
+                    revKnob.classList.remove('left-7');
+                    revKnob.classList.add('left-1');
+                }
             } else {
                 // If no save found, just ensure theme matches system or default
                 if (localStorage.getItem('theme') === 'light') {
@@ -455,28 +534,31 @@ HTML_TEMPLATE = """
         };
 
         const switchPhase = () => {
-            // Play notification sound with repeats
-            audio.play(appState.settings.repeatCount, appState.settings.repeatDelay);
-            appState.isFocus = !appState.isFocus;
+                // Determine the upcoming phase (we haven't toggled yet)
+                const nextIsFocus = !appState.isFocus;
+                // If we're moving into focus (i.e., break ended) and reverse is enabled, play reversed sound
+                const reverseFlag = nextIsFocus && appState.settings.reverseOnBreakEnd;
+                audio.play(appState.settings.repeatCount, appState.settings.repeatDelay, reverseFlag);
+                appState.isFocus = nextIsFocus;
 
-            if (appState.isFocus) {
-                // Switching to Focus
-                appState.totalTime = appState.settings.focusTime;
-                els.statusBadge.textContent = "Focus Time";
-                els.statusBadge.className = "mb-6 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400 transition-colors";
-                els.nextText.textContent = `Next: ${appState.settings.breakTime}s Break`;
-            } else {
-                // Switching to Break
-                appState.totalTime = appState.settings.breakTime;
-                els.statusBadge.textContent = "Look Away (20ft)";
-                els.statusBadge.className = "mb-6 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 transition-colors";
-                els.nextText.textContent = `Next: ${appState.settings.focusTime / 60}m Focus`;
+                if (appState.isFocus) {
+                    // Switching to Focus
+                    appState.totalTime = appState.settings.focusTime;
+                    els.statusBadge.textContent = "Focus Time";
+                    els.statusBadge.className = "mb-6 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400 transition-colors";
+                    els.nextText.textContent = `Next: ${appState.settings.breakTime}s Break`;
+                } else {
+                    // Switching to Break
+                    appState.totalTime = appState.settings.breakTime;
+                    els.statusBadge.textContent = "Look Away (20ft)";
+                    els.statusBadge.className = "mb-6 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 transition-colors";
+                    els.nextText.textContent = `Next: ${appState.settings.focusTime / 60}m Focus`;
 
-                // Update notification dynamically
-                if (appState.settings.notificationsEnabled) {
-                    new Notification("Eye Break!", { body: `Look 20 feet away for ${appState.settings.breakTime} seconds.` });
+                    // Update notification dynamically
+                    if (appState.settings.notificationsEnabled) {
+                        new Notification("Eye Break!", { body: `Look 20 feet away for ${appState.settings.breakTime} seconds.` });
+                    }
                 }
-            }
 
             // Initialize timestamps for the new phase
             appState.totalTime = appState.isFocus ? appState.settings.focusTime : appState.settings.breakTime;
@@ -632,6 +714,26 @@ HTML_TEMPLATE = """
             } else {
                 notificationToggle.classList.add('bg-slate-300');
                 notificationToggle.classList.remove('bg-brand-600');
+                knob.classList.remove('left-7');
+                knob.classList.add('left-1');
+            }
+            saveSettings();
+        });
+
+        // Reverse Toggle (play reverse sound when break ends)
+        const reverseToggleBtn = document.getElementById('reverse-toggle');
+        reverseToggleBtn.addEventListener('click', () => {
+            const enabled = !appState.settings.reverseOnBreakEnd;
+            appState.settings.reverseOnBreakEnd = enabled;
+            const knob = reverseToggleBtn.querySelector('div');
+            if (enabled) {
+                reverseToggleBtn.classList.add('bg-brand-600');
+                reverseToggleBtn.classList.remove('bg-slate-300');
+                knob.classList.remove('left-1');
+                knob.classList.add('left-7');
+            } else {
+                reverseToggleBtn.classList.add('bg-slate-300');
+                reverseToggleBtn.classList.remove('bg-brand-600');
                 knob.classList.remove('left-7');
                 knob.classList.add('left-1');
             }

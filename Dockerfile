@@ -4,13 +4,15 @@ FROM ghcr.io/astral-sh/uv:debian
 # Create app directory
 # Workdir and copy app files
 WORKDIR /app
-COPY eye-timer.py ./
-COPY favicon.png ./favicon.png
-COPY pyproject.toml ./
-COPY uv.lock ./
 
 # Install dependencies
+COPY pyproject.toml ./
+COPY uv.lock ./
 RUN uv sync --locked --no-dev
+
+# Copy app source
+COPY favicon.png ./favicon.png
+COPY eye-timer.py ./
 
 # Expose port
 EXPOSE 5000
