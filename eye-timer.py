@@ -571,6 +571,9 @@ HTML_TEMPLATE = """
         };
 
         const tick = () => {
+            // Only update while the timer is actively running
+            if (!appState.isRunning) return;
+
             // If no endTime set, nothing to do
             if (!appState.endTimeMs) return;
 
@@ -593,8 +596,15 @@ HTML_TEMPLATE = """
 
         const toggleTimer = () => {
             audio.resume(); // Ensure audio context is active on click
-            
+
             if (appState.isRunning) {
+                // Snapshot remaining time and clear the endTime to avoid stale timestamps
+                if (appState.endTimeMs) {
+                    appState.remainingMs = Math.max(0, appState.endTimeMs - Date.now());
+                    appState.timeLeft = Math.max(0, Math.ceil(appState.remainingMs / 1000));
+                    appState.endTimeMs = null;
+                }
+
                 clearInterval(appState.timerId);
                 appState.isRunning = false;
                 els.playIcon.className = "fa-solid fa-play text-xl pl-1";
@@ -604,16 +614,23 @@ HTML_TEMPLATE = """
             } else {
                 // Request notification permission on first start
                 if (Notification.permission !== "granted") Notification.requestPermission();
+
                 // Initialize timestamps based on remainingMs (preserve paused remaining time)
                 appState.startTimeMs = Date.now();
                 appState.endTimeMs = appState.startTimeMs + (appState.remainingMs || (appState.totalTime * 1000));
-                // Start the main updater (timestamp-based). Frequency isn't critical because tick uses wall-clock.
-                appState.timerId = setInterval(tick, 1000);
+
+                // Mark running, update UI, and immediately reconcile time (handles any missed phases)
                 appState.isRunning = true;
                 els.playIcon.className = "fa-solid fa-pause text-xl";
                 els.playText.textContent = "Pause";
                 els.btnToggle.classList.remove('bg-brand-600', 'hover:bg-brand-500');
                 els.btnToggle.classList.add('bg-amber-500', 'hover:bg-amber-600');
+
+                // Run a tick immediately so we don't wait the first interval and to fast-forward if needed
+                tick();
+
+                // Start the main updater (timestamp-based). Frequency isn't critical because tick uses wall-clock.
+                appState.timerId = setInterval(tick, 1000);
             }
         };
 
@@ -746,7 +763,8 @@ HTML_TEMPLATE = """
 
         // If page visibility changes (user returns), recompute immediately
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) tick();
+            // Only run tick when the timer is actively running
+            if (!document.hidden && appState.isRunning) tick();
         });
 
         // rAF loop for smooth progress when visible; setInterval fallback handles backgrounded checks
