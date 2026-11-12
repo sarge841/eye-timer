@@ -70,23 +70,27 @@ uv run python -m unittest discover -v
 - `toggleFullscreen()` wraps the Fullscreen API (`requestFullscreen` / `exitFullscreen` with `webkit` fallbacks), and `fullscreenchange` listeners keep the icon (`fa-expand` vs `fa-compress`) in sync even when the user exits fullscreen with the `Esc` key.
 
 ### D. Dynamic Screen / Anti-Burn-In Engine
-- Designed to prevent OLED/monitor burn-in and image retention while keeping the countdown, status badge, progress bar, and controls live.
-- Controlled by `appState.settings.burnInEnabled` (`#burn-in-toggle`) and `appState.settings.burnInMode` (`#burn-in-mode`).
-- **4 Supported Modes** (`VALID_BURN_IN_MODES`):
-  1. `drift` (**Gentle Orbit / Pixel Drift**): Moves `#app` along a continuous 2D Lissajous curve across the viewport with a softly shifting ambient glow orb (`#burn-in-drift-orb`).
-  2. `bounce` (**DVD Bounce / Color Shift**): Bounces `#app` diagonally off viewport edges and cycles through theme-aware accent palettes (`BOUNCE_PALETTES.dark` and `BOUNCE_PALETTES.light`) on each wall collision.
-  3. `aurora` (**Ambient Aurora / Waves & Wander**): Renders animated blurred aurora blobs (`#burn-in-aurora-layer`) behind a translucent glassmorphic wandering timer HUD.
-  4. `starfield` (**Cosmic Drift / Particles & Wander**): Renders drifting/twinkling particles on `#burn-in-canvas` (`renderStarfield()`) with a translucent wandering timer HUD.
+- Designed to prevent OLED/monitor burn-in and image retention without distracting movement of the timer itself.
+- Controlled by `appState.settings.burnInEnabled` (`#burn-in-toggle`), `appState.settings.burnInMode` (`#burn-in-mode`), and the **Dynamic Style Tuning** sliders (`#burn-in-style-settings`):
+  - `burnInSpeed` (`#burn-in-speed`, `10%`–`300%`, default `100%`): Movement speed of drifting orbs, bouncing spotlight, aurora waves, and drifting particles.
+  - `burnInColorSpeed` (`#burn-in-color-speed`, `10%`–`300%`, default `100%`): Speed of color/hue cycling across all 4 background styles.
+  - `burnInParticles` (`#burn-in-particles`, `10`–`250`, default `65`): Live particle count in `starfield` mode (`syncParticleCount()`).
+- **Stationary, Simpler Semi-Transparent Timer**:
+  - `#app` / `#main-card` stays stationary in the center of the screen so the user is never distracted by a moving timer.
+  - When dimmed (`body.burn-in-active.burn-in-idle`), `#main-card` becomes semi-transparent so the dynamic background animates right behind the timer, `.burn-in-dimmable` menu controls (header bar, Reset/Start/Skip buttons, footer text) fade out (`opacity: 0; pointer-events: none;`), and `#timer-display` (`XX:XX`) stays visible in a softer, lower-contrast color that remains easily readable.
+  - **Click Anywhere to Wake (15s Timeout)**: Clicking anywhere on the screen (outside `#settings-modal`) calls `wakeBurnInMenu()`, making the full timer menu clearly visible (`opacity: 1`) and interactive, then dimming it away again after 15 seconds of inactivity (`BURN_IN_IDLE_TIMEOUT_MS = 15000`).
+  - **Settings Modal**: `#settings-modal` always displays normally when open and pauses the 15s inactivity timer until closed.
+- **4 Supported Background Modes** (`VALID_BURN_IN_MODES`):
+  1. `drift` (**Ambient Orbs / Gentle Color Drift**): Smoothly orbits two blurred color-shifting orbs (`#burn-in-drift-orb`, `#burn-in-drift-orb-secondary`) behind the semi-transparent timer.
+  2. `bounce` (**Color Bounce / Drifting Spotlight**): Bounces a soft glowing spotlight orb (`#burn-in-bounce-orb`) across the background and cycles through theme-aware accent palettes (`BOUNCE_PALETTES.dark` and `BOUNCE_PALETTES.light`).
+  3. `aurora` (**Ambient Aurora / Flowing Waves**): Renders animated blurred aurora blobs (`#burn-in-aurora-layer`) flowing behind the translucent timer card.
+  4. `starfield` (**Cosmic Drift / Starfield & Particles**): Renders drifting/twinkling particles on `#burn-in-canvas` (`renderStarfield()`) behind the translucent timer card.
 - **Dark Mode & Light Mode Support**:
   - All 4 modes check `isDarkMode()` (`document.documentElement.classList.contains('dark')`) and use Tailwind `dark:` classes plus CSS rules (`html.dark body.burn-in-active` vs `html:not(.dark) body.burn-in-active`).
-- **Interaction & Layout Gotchas**:
-  - **Pause on Hover / Modal**: Card movement pauses automatically when the user hovers over `#app` (`burnInState.isHoveringCard`) or when `#settings-modal` is open, so buttons are never a moving target.
-  - **Idle Chrome Dimming**: Elements with `.burn-in-dimmable` (header, controls panel, footer text) dim to low opacity after 3 seconds of mouse inactivity (`body.burn-in-idle`) and restore to 100% opacity immediately on mouse movement or hover.
-  - **CSS Containing Block Rule**: `#settings-modal` is intentionally placed **outside** `#app` as a direct child of `<body>`. Because `#app` uses `transform: translate3d(...)` during anti-burn-in movement, placing a `position: fixed` modal inside `#app` would trap the modal inside the transformed card's coordinate space. Keep `#settings-modal` outside `#app`!
 
 ### E. Persistence (`localStorage`)
 - Settings are stored as JSON under the `localStorage` key `'eyeTimerSettings'`.
-- Saved keys: `focus`, `break`, `sound`, `volume`, `reverse`, `repeatCount`, `repeatDelay`, `theme`, `notificationsEnabled`, `burnInEnabled`, `burnInMode`.
+- Saved keys: `focus`, `break`, `sound`, `volume`, `reverse`, `repeatCount`, `repeatDelay`, `theme`, `notificationsEnabled`, `burnInEnabled`, `burnInMode`, `burnInSpeed`, `burnInColorSpeed`, `burnInParticles`.
 
 ---
 

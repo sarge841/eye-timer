@@ -8,12 +8,13 @@ This application was built entirely using AI tools and assistance. While every e
 ## Features
 - **Customizable 20-20-20 Durations**: Configure focus duration (minutes) and break duration (seconds).
 - **Fullscreen Mode**: Toggle fullscreen directly from the expand/compress icon right next to the settings gear in the header.
-- **Dynamic Screen (Anti-Burn-In / Screensaver)**: Prevent OLED burn-in and monitor image retention while keeping the countdown timer, phase status, and progress visible. Includes 4 theme-aware styles that respect both Dark Mode and Light Mode:
-  - **Gentle Orbit (Pixel Drift)**: Smoothly orbits the timer across the screen with an ambient color-shifting glow.
-  - **DVD Bounce (Color Shift)**: Bounces the timer off the screen edges, cycling accent colors on every bounce.
-  - **Ambient Aurora (Waves & Wander)**: Flowing aurora borealis waves behind a translucent wandering glass HUD.
-  - **Cosmic Drift (Particles & Wander)**: Animated drifting particle starfield with a wandering translucent timer HUD.
-  - Automatically dims static chrome when idle and pauses movement on hover so buttons are always easy to click.
+- **Dynamic Screen (Anti-Burn-In / Screensaver)**: Prevent OLED burn-in and monitor image retention with a distraction-free, stationary semi-transparent timer window and softer `XX:XX` countdown numbers over an animated background. Includes 4 theme-aware background styles that respect both Dark Mode and Light Mode:
+  - **Ambient Orbs (Gentle Color Drift)**: Smoothly orbits soft color-shifting glow orbs behind the semi-transparent timer.
+  - **Color Bounce (Drifting Spotlight)**: Bounces a soft ambient spotlight across the background, cycling accent colors on every bounce.
+  - **Ambient Aurora (Flowing Waves)**: Flowing aurora borealis waves behind the translucent timer window.
+  - **Cosmic Drift (Starfield & Particles)**: Animated drifting particle starfield behind the translucent timer window.
+  - **Dynamic Style Tuning**: Customize movement speed (`10%–300%`), color change speed (`10%–300%`), and particle count (`10–250`), all saved automatically in `localStorage`.
+  - Clicking anywhere on the screen brings up the full timer menu clearly, which then dims back to the simpler view after 15 seconds of inactivity (while the Settings modal always displays normally when open).
 - **Synthesized Audio Notifications**: Built-in Web Audio API synthesizer (`Gentle Chime`, `Digital Beep`, `Harp Flow`, `Menacing`) with adjustable volume, repeat count, repeat delay, and optional reverse sound playback when a break ends.
 - **Dark Mode & Desktop Notifications**: One-click toggles persisted in `localStorage`.
 - **Accurate Wall-Clock Timing**: Uses timestamp deltas so browser background tab throttling never causes timer drift.

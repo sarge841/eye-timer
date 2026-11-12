@@ -43,6 +43,9 @@ Eye Timer is a single-file Flask application that serves a self-contained frontâ
   - `repeatDelay` (`1-10` seconds, default `1`)
   - `burnInEnabled` (`boolean`, default `false`)
   - `burnInMode` (`'drift' | 'bounce' | 'aurora' | 'starfield'`, default `'drift'`)
+  - `burnInSpeed` (`10-300`%, default `100`)
+  - `burnInColorSpeed` (`10-300`%, default `100`)
+  - `burnInParticles` (`10-250`, default `65`)
 
 Persistence: `saveSettings()` writes a JSON blob to `localStorage` under `eyeTimerSettings`; `loadSettings()` reads, validates, and applies it on startup.
 
@@ -64,18 +67,19 @@ UI references are cached in `els` for efficient DOM access; no frontend framewor
 - `fullscreenchange` and `webkitfullscreenchange` listeners invoke `updateFullscreenUI()` to toggle `#fullscreen-icon` between `fa-expand` and `fa-compress`, keeping the button icon accurate even when exiting fullscreen via `Esc`.
 
 ## 7. Dynamic Screen / Anti-Burn-In Engine
-To prevent OLED burn-in and LCD image retention during long focus sessions (especially in fullscreen):
-- **Settings Controls**: Users can toggle `#burn-in-toggle` (`Dynamic Screen (Anti-Burn-In)`) and choose a style from `#burn-in-mode` (`Dynamic Screen Style`).
-- **Four Visual Styles**:
-  1. **Gentle Orbit (`drift`)**: Moves `#app` along a smooth 2D Lissajous curve across the viewport while a blurred ambient orb (`#burn-in-drift-orb`) trails behind and cycles hues.
-  2. **DVD Bounce (`bounce`)**: Moves `#app` at a constant diagonal velocity, bouncing off viewport edges and cycling through theme-aware color palettes (`BOUNCE_PALETTES.dark` and `BOUNCE_PALETTES.light`) on every edge collision.
-  3. **Ambient Aurora (`aurora`)**: Displays animated, softly blurred aurora borealis layers (`#burn-in-aurora-layer`) while `#main-card` becomes a translucent frosted-glass HUD wandering across the viewport.
-  4. **Cosmic Drift (`starfield`)**: Animates 65 twinkling/drifting particles on `#burn-in-canvas` while `#main-card` floats as a translucent HUD along a slow orbital path.
-- **Theme Awareness**: Every mode respects Dark Mode (`html.dark`) and Light Mode (`html:not(.dark)`). Dark mode uses OLED-safe deep backgrounds (`#020617`) and luminous pastel/neon accents; light mode uses soft daylight backgrounds (`#f1f5f9`) and saturated high-contrast accents.
-- **Ergonomics & Idle Dimming**:
-  - Static chrome (`.burn-in-dimmable`: header bar, control buttons, footer reminder) dims to `0.22` opacity after 3 seconds of mouse inactivity (`body.burn-in-idle`) while keeping the countdown timer, phase badge, and progress bar bright.
-  - Hovering over `#app` or opening `#settings-modal` immediately restores 100% opacity and pauses card movement so controls are effortless to click.
-  - `#settings-modal` is placed outside `#app` so CSS `transform: translate3d(...)` on `#app` does not create a containing block for the `fixed` modal.
+To prevent OLED burn-in and LCD image retention during long focus sessions without distracting timer movement:
+- **Settings Controls**: Users can toggle `#burn-in-toggle` (`Dynamic Screen (Anti-Burn-In)`) and choose a background style from `#burn-in-mode` (`Dynamic Screen Style`).
+- **Stationary, Simpler Semi-Transparent Interface**:
+  - The timer card (`#app` / `#main-card`) remains stationary in the center of the viewport.
+  - In its dimmed state (`body.burn-in-active.burn-in-idle`), `#main-card` becomes a subtle, semi-transparent glass window so the moving background behind it shines through, surrounding menu chrome (`.burn-in-dimmable`: header bar, control buttons, footer reminder) fades away (`opacity: 0; pointer-events: none;`), and the `XX:XX` countdown (`#timer-display`) stays visible in a softer, lower-contrast color that remains easy to read.
+  - **Click Anywhere to Wake (15s Inactivity Timeout)**: Clicking anywhere on the screen (outside `#settings-modal`) triggers `wakeBurnInMenu()`, making the entire timer menu clearly visible (`opacity: 1`) for 15 seconds (`BURN_IN_IDLE_TIMEOUT_MS = 15000`) before smoothly dimming away again.
+  - **Settings Modal**: `#settings-modal` displays with normal full visibility whenever open.
+- **Four Background Styles**:
+  1. **Ambient Orbs (`drift`)**: Moves two blurred ambient color orbs (`#burn-in-drift-orb`, `#burn-in-drift-orb-secondary`) along smooth 2D Lissajous curves behind the semi-transparent timer while cycling hues.
+  2. **Color Bounce (`bounce`)**: Moves a soft glowing spotlight orb (`#burn-in-bounce-orb`) diagonally across the viewport, bouncing off edges and cycling through theme-aware color palettes (`BOUNCE_PALETTES.dark` and `BOUNCE_PALETTES.light`).
+  3. **Ambient Aurora (`aurora`)**: Displays animated, softly blurred aurora borealis layers (`#burn-in-aurora-layer`) flowing behind the semi-transparent timer card.
+  4. **Cosmic Drift (`starfield`)**: Animates 65 twinkling/drifting particles on `#burn-in-canvas` across the viewport and behind the semi-transparent timer card.
+- **Theme Awareness**: Every mode respects Dark Mode (`html.dark`) and Light Mode (`html:not(.dark)`). Dark mode uses OLED-safe deep backgrounds (`#020617`) and soft luminous accents; light mode uses soft daylight backgrounds (`#f1f5f9`) and balanced slate/pastel accents.
 
 ## 8. Settings Modal & Independent Toggles
 - Modal collects numeric inputs (focus minutes, break seconds, repeat count, repeat delay), sound selection + test button, volume slider, theme toggle, notification toggle, reverse-sound toggle, and dynamic screen anti-burn-in toggle + mode selector.

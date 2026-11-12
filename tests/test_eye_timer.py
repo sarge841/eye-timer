@@ -22,6 +22,9 @@ class MockAppState:
             'repeatDelay': 1,
             'burnInEnabled': False,
             'burnInMode': 'drift',
+            'burnInSpeed': 100,
+            'burnInColorSpeed': 100,
+            'burnInParticles': 65,
         }
         self.isFocus = True
         self.timeLeft = self.settings['focusTime']
@@ -38,11 +41,14 @@ class TestEyeTimer(unittest.TestCase):
         self.assertFalse(self.appState.settings['reverseOnBreakEnd'])
 
     def test_default_settings_include_burn_in(self):
-        """Ensure burnInEnabled and burnInMode exist with expected defaults."""
+        """Ensure burnInEnabled, burnInMode, and tuning settings exist with expected defaults."""
         self.assertIn('burnInEnabled', self.appState.settings)
         self.assertFalse(self.appState.settings['burnInEnabled'])
         self.assertIn('burnInMode', self.appState.settings)
         self.assertEqual(self.appState.settings['burnInMode'], 'drift')
+        self.assertEqual(self.appState.settings['burnInSpeed'], 100)
+        self.assertEqual(self.appState.settings['burnInColorSpeed'], 100)
+        self.assertEqual(self.appState.settings['burnInParticles'], 65)
 
     def test_toggle_reverse_setting(self):
         """Toggling the reverse setting changes the stored value."""
@@ -173,6 +179,24 @@ class TestEyeTimer(unittest.TestCase):
         if 'burnInMode' in data and data['burnInMode'] in VALID_BURN_IN_MODES:
             app.settings['burnInMode'] = data['burnInMode']
 
+        if 'burnInSpeed' in data:
+            try:
+                app.settings['burnInSpeed'] = max(10, min(300, int(data['burnInSpeed'])))
+            except Exception:
+                pass
+
+        if 'burnInColorSpeed' in data:
+            try:
+                app.settings['burnInColorSpeed'] = max(10, min(300, int(data['burnInColorSpeed'])))
+            except Exception:
+                pass
+
+        if 'burnInParticles' in data:
+            try:
+                app.settings['burnInParticles'] = max(10, min(250, int(data['burnInParticles'])))
+            except Exception:
+                pass
+
         # Theme is not part of app settings in the Python model; ignore
 
         return app
@@ -191,6 +215,9 @@ class TestEyeTimer(unittest.TestCase):
             'reverse': True,
             'burnInEnabled': True,
             'burnInMode': 'bounce',
+            'burnInSpeed': 160,
+            'burnInColorSpeed': 210,
+            'burnInParticles': 120,
         }
         blob = json.dumps(saved)
         app = MockAppState()
@@ -206,6 +233,9 @@ class TestEyeTimer(unittest.TestCase):
         self.assertTrue(app.settings['reverseOnBreakEnd'])
         self.assertTrue(app.settings['burnInEnabled'])
         self.assertEqual(app.settings['burnInMode'], 'bounce')
+        self.assertEqual(app.settings['burnInSpeed'], 160)
+        self.assertEqual(app.settings['burnInColorSpeed'], 210)
+        self.assertEqual(app.settings['burnInParticles'], 120)
 
     def test_invalid_burn_in_mode_ignored_on_load(self):
         """Invalid burnInMode values fall back to existing valid mode."""
@@ -267,17 +297,25 @@ class TestFlaskAppFrontend(unittest.TestCase):
         self.assertRegex(html, pattern)
 
     def test_burn_in_settings_and_modes_present(self):
-        """Ensure dynamic anti-burn-in toggle, mode selector, and all 4 modes exist in HTML."""
+        """Ensure dynamic anti-burn-in toggle, mode selector, tuning sliders, 15s timeout, and all 4 modes exist in HTML."""
         html = self.client.get('/').get_data(as_text=True)
         self.assertIn('id="burn-in-toggle"', html)
         self.assertIn('id="burn-in-mode"', html)
+        self.assertIn('id="burn-in-style-settings"', html)
+        self.assertIn('id="burn-in-speed"', html)
+        self.assertIn('id="burn-in-color-speed"', html)
+        self.assertIn('id="burn-in-particles"', html)
         for mode in VALID_BURN_IN_MODES:
             self.assertIn(f'<option value="{mode}">', html)
         # Check dark mode and light mode handling in dynamic screen
         self.assertIn('html.dark body.burn-in-active', html)
         self.assertIn('html:not(.dark) body.burn-in-active', html)
+        self.assertIn('BURN_IN_IDLE_TIMEOUT_MS = 15000', html)
+        self.assertIn('wakeBurnInMenu', html)
         self.assertIn('BOUNCE_PALETTES', html)
         self.assertIn('stepBurnInAnimation', html)
+        # Ensure the timer card container itself is not translated around the screen
+        self.assertNotIn('els.appContainer.style.transform', html)
 
     def test_favicon_route(self):
         """GET /favicon.png returns 200."""

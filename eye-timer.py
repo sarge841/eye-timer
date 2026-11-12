@@ -87,14 +87,65 @@ HTML_TEMPLATE = """
             background-color: #f1f5f9;
         }
 
+        /* Awake state in Dynamic Screen: semi-transparent card, full menu visibility */
+        html.dark body.burn-in-active #main-card {
+            background-color: rgba(30, 41, 59, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-color: rgba(148, 163, 184, 0.22);
+        }
+        html:not(.dark) body.burn-in-active #main-card {
+            background-color: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-color: rgba(148, 163, 184, 0.3);
+        }
+
+        /* Simpler dimmed state after 15s inactivity: ultra-translucent card, hidden menu chrome, softer timer numbers */
+        html.dark body.burn-in-active.burn-in-idle #main-card {
+            background-color: rgba(15, 23, 42, 0.24);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border-color: rgba(148, 163, 184, 0.08);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        html:not(.dark) body.burn-in-active.burn-in-idle #main-card {
+            background-color: rgba(255, 255, 255, 0.30);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border-color: rgba(148, 163, 184, 0.16);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        }
+
+        /* Softer, lower-contrast (yet easily readable) timer digits when dimmed */
+        html.dark body.burn-in-active.burn-in-idle #timer-display {
+            color: rgba(203, 213, 225, 0.72);
+            text-shadow: 0 2px 12px rgba(2, 6, 23, 0.45);
+        }
+        html:not(.dark) body.burn-in-active.burn-in-idle #timer-display {
+            color: rgba(51, 65, 85, 0.72);
+            text-shadow: 0 2px 12px rgba(255, 255, 255, 0.55);
+        }
+
+        body.burn-in-active #status-badge,
+        body.burn-in-active #next-phase-text,
+        body.burn-in-active #progress-bar-container {
+            transition: opacity 0.6s ease;
+        }
+        body.burn-in-active.burn-in-idle #status-badge,
+        body.burn-in-active.burn-in-idle #next-phase-text {
+            opacity: 0.55;
+        }
+        body.burn-in-active.burn-in-idle #progress-bar-container {
+            opacity: 0.3;
+        }
+
         .burn-in-dimmable {
             transition: opacity 0.6s ease;
         }
         body.burn-in-active.burn-in-idle .burn-in-dimmable {
-            opacity: 0.22;
-        }
-        body.burn-in-active #app:hover .burn-in-dimmable {
-            opacity: 1 !important;
+            opacity: 0;
+            pointer-events: none;
         }
 
         /* Aurora animated blobs */
@@ -121,9 +172,14 @@ HTML_TEMPLATE = """
 
     <!-- Dynamic Screen (Anti-Burn-In) Fullscreen Backdrop & Canvas -->
     <div id="burn-in-backdrop" class="fixed inset-0 pointer-events-none overflow-hidden z-0 hidden">
-        <!-- Ambient glow for Drift mode -->
+        <!-- Ambient drifting orbs for Drift mode -->
         <div id="burn-in-drift-glow" class="absolute inset-0 opacity-0 transition-opacity duration-700 flex items-center justify-center">
-            <div id="burn-in-drift-orb" class="w-96 h-96 rounded-full blur-3xl transition-colors duration-1000 bg-blue-400/20 dark:bg-blue-500/15"></div>
+            <div id="burn-in-drift-orb" class="w-[28rem] h-[28rem] rounded-full blur-3xl transition-colors duration-1000 bg-blue-400/30 dark:bg-blue-500/20"></div>
+            <div id="burn-in-drift-orb-secondary" class="w-[24rem] h-[24rem] rounded-full blur-3xl transition-colors duration-1000 bg-teal-300/25 dark:bg-indigo-500/15 absolute"></div>
+        </div>
+        <!-- Bouncing spotlight orb for Bounce mode -->
+        <div id="burn-in-bounce-layer" class="absolute inset-0 opacity-0 transition-opacity duration-700 flex items-center justify-center">
+            <div id="burn-in-bounce-orb" class="w-[26rem] h-[26rem] rounded-full blur-3xl transition-colors duration-700"></div>
         </div>
         <!-- Aurora layers for Aurora mode -->
         <div id="burn-in-aurora-layer" class="absolute inset-0 opacity-0 transition-opacity duration-700">
@@ -225,7 +281,7 @@ HTML_TEMPLATE = """
                     <div class="flex items-center justify-between">
                         <div>
                             <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Dynamic Screen (Anti-Burn-In)</label>
-                            <p class="text-xs text-gray-400 dark:text-gray-500">Moves &amp; shifts UI to prevent screen burn-in</p>
+                            <p class="text-xs text-gray-400 dark:text-gray-500">Simpler translucent timer with dynamic background</p>
                         </div>
                         <button id="burn-in-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-slate-300 shrink-0">
                             <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-all duration-300 shadow-sm"></div>
@@ -235,11 +291,45 @@ HTML_TEMPLATE = """
                     <div id="burn-in-mode-wrapper">
                         <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Dynamic Screen Style</label>
                         <select id="burn-in-mode" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition text-sm">
-                            <option value="drift">Gentle Orbit (Pixel Drift)</option>
-                            <option value="bounce">DVD Bounce (Color Shift)</option>
-                            <option value="aurora">Ambient Aurora (Waves &amp; Wander)</option>
-                            <option value="starfield">Cosmic Drift (Particles &amp; Wander)</option>
+                            <option value="drift">Ambient Orbs (Gentle Color Drift)</option>
+                            <option value="bounce">Color Bounce (Drifting Spotlight)</option>
+                            <option value="aurora">Ambient Aurora (Flowing Waves)</option>
+                            <option value="starfield">Cosmic Drift (Starfield &amp; Particles)</option>
                         </select>
+                    </div>
+
+                    <!-- Dynamic Screen Style Tuning Section -->
+                    <div id="burn-in-style-settings" class="bg-gray-50 dark:bg-slate-700/40 p-3.5 rounded-xl space-y-3 border border-gray-200/70 dark:border-slate-600/50">
+                        <div class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">
+                            Dynamic Style Tuning
+                        </div>
+
+                        <!-- Movement Speed -->
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label for="burn-in-speed" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Movement Speed</label>
+                                <span id="burn-in-speed-val" class="text-xs font-mono bg-slate-200 dark:bg-slate-600 px-2 rounded">100%</span>
+                            </div>
+                            <input type="range" id="burn-in-speed" min="10" max="300" step="10" value="100" class="w-full">
+                        </div>
+
+                        <!-- Color Change Speed -->
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label for="burn-in-color-speed" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Color Change Speed</label>
+                                <span id="burn-in-color-speed-val" class="text-xs font-mono bg-slate-200 dark:bg-slate-600 px-2 rounded">100%</span>
+                            </div>
+                            <input type="range" id="burn-in-color-speed" min="10" max="300" step="10" value="100" class="w-full">
+                        </div>
+
+                        <!-- Particle Count -->
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label for="burn-in-particles" class="block text-xs font-medium text-gray-500 dark:text-gray-400">Particle Count</label>
+                                <span id="burn-in-particles-val" class="text-xs font-mono bg-slate-200 dark:bg-slate-600 px-2 rounded">65</span>
+                            </div>
+                            <input type="range" id="burn-in-particles" min="10" max="250" step="5" value="65" class="w-full">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -253,10 +343,10 @@ HTML_TEMPLATE = """
     </div>
 
     <!-- Main App Container -->
-    <div id="app" class="w-full max-w-md p-6 mx-4 relative z-10 will-change-transform">
+    <div id="app" class="w-full max-w-md p-6 mx-4 relative z-10">
 
         <!-- Main Card -->
-        <div id="main-card" class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-700 overflow-hidden transition-colors duration-500">
+        <div id="main-card" class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-700 overflow-hidden transition-all duration-500">
             
             <!-- Header -->
             <div class="p-6 flex justify-between items-center border-b border-gray-100 dark:border-slate-700/50 burn-in-dimmable">
@@ -292,7 +382,7 @@ HTML_TEMPLATE = """
                 <p class="text-gray-400 text-sm font-medium h-6" id="next-phase-text">Next: 20s Break</p>
 
                 <!-- Circular Progress Background (Visual Flair) -->
-                <div class="absolute inset-0 pointer-events-none opacity-5">
+                <div class="absolute inset-0 pointer-events-none opacity-5 burn-in-dimmable">
                     <svg class="w-full h-full" viewBox="0 0 100 100">
                         <circle cx="50" cy="50" r="40" stroke="currentColor" stroke-width="1" fill="none" />
                     </svg>
@@ -300,7 +390,7 @@ HTML_TEMPLATE = """
             </div>
 
             <!-- Progress Bar -->
-            <div class="w-full h-2 bg-gray-100 dark:bg-slate-900">
+            <div id="progress-bar-container" class="w-full h-2 bg-gray-100 dark:bg-slate-900/60">
                 <div id="progress-bar" class="h-full bg-brand-500 transition-all duration-1000 ease-linear w-full"></div>
             </div>
 
@@ -472,7 +562,10 @@ HTML_TEMPLATE = """
                 repeatCount: 1, // Default x
                 repeatDelay: 1, // Default y
                 burnInEnabled: false,
-                burnInMode: 'drift' // 'drift' | 'bounce' | 'aurora' | 'starfield'
+                burnInMode: 'drift', // 'drift' | 'bounce' | 'aurora' | 'starfield'
+                burnInSpeed: 100, // 10 - 300 (%)
+                burnInColorSpeed: 100, // 10 - 300 (%)
+                burnInParticles: 65 // 10 - 250
             }
         };
 
@@ -500,6 +593,9 @@ HTML_TEMPLATE = """
             burnInBackdrop: document.getElementById('burn-in-backdrop'),
             burnInDriftGlow: document.getElementById('burn-in-drift-glow'),
             burnInDriftOrb: document.getElementById('burn-in-drift-orb'),
+            burnInDriftOrbSecondary: document.getElementById('burn-in-drift-orb-secondary'),
+            burnInBounceLayer: document.getElementById('burn-in-bounce-layer'),
+            burnInBounceOrb: document.getElementById('burn-in-bounce-orb'),
             burnInAuroraLayer: document.getElementById('burn-in-aurora-layer'),
             burnInCanvas: document.getElementById('burn-in-canvas'),
             inputs: {
@@ -514,7 +610,13 @@ HTML_TEMPLATE = """
                 repeatCount: document.getElementById('repeat-count'),
                 repeatDelay: document.getElementById('repeat-delay'),
                 burnInToggle: document.getElementById('burn-in-toggle'),
-                burnInMode: document.getElementById('burn-in-mode')
+                burnInMode: document.getElementById('burn-in-mode'),
+                burnInSpeed: document.getElementById('burn-in-speed'),
+                burnInSpeedVal: document.getElementById('burn-in-speed-val'),
+                burnInColorSpeed: document.getElementById('burn-in-color-speed'),
+                burnInColorSpeedVal: document.getElementById('burn-in-color-speed-val'),
+                burnInParticles: document.getElementById('burn-in-particles'),
+                burnInParticlesVal: document.getElementById('burn-in-particles-val')
             }
         };
 
@@ -558,48 +660,63 @@ HTML_TEMPLATE = """
         };
 
         // --- Dynamic Screen (Anti-Burn-In) Engine ---
+        const BURN_IN_IDLE_TIMEOUT_MS = 15000; // Dim menu away after 15s of inactivity
+
         const BOUNCE_PALETTES = {
             dark: [
-                { text: '#38bdf8', border: 'rgba(56, 189, 248, 0.45)', bar: '#0ea5e9', glow: '0 0 28px rgba(56, 189, 248, 0.25)' },
-                { text: '#34d399', border: 'rgba(52, 211, 153, 0.45)', bar: '#10b981', glow: '0 0 28px rgba(52, 211, 153, 0.25)' },
-                { text: '#a78bfa', border: 'rgba(167, 139, 250, 0.45)', bar: '#8b5cf6', glow: '0 0 28px rgba(167, 139, 250, 0.25)' },
-                { text: '#fbbf24', border: 'rgba(251, 191, 36, 0.45)', bar: '#f59e0b', glow: '0 0 28px rgba(251, 191, 36, 0.25)' },
-                { text: '#fb7185', border: 'rgba(251, 113, 133, 0.45)', bar: '#f43f5e', glow: '0 0 28px rgba(251, 113, 133, 0.25)' },
-                { text: '#2dd4bf', border: 'rgba(45, 212, 191, 0.45)', bar: '#14b8a6', glow: '0 0 28px rgba(45, 212, 191, 0.25)' }
+                { text: 'rgba(56, 189, 248, 0.92)', softText: 'rgba(125, 211, 252, 0.72)', orb: 'rgba(56, 189, 248, 0.22)', bar: '#0ea5e9' },
+                { text: 'rgba(52, 211, 153, 0.92)', softText: 'rgba(110, 231, 183, 0.72)', orb: 'rgba(52, 211, 153, 0.22)', bar: '#10b981' },
+                { text: 'rgba(167, 139, 250, 0.92)', softText: 'rgba(196, 181, 253, 0.72)', orb: 'rgba(167, 139, 250, 0.22)', bar: '#8b5cf6' },
+                { text: 'rgba(251, 191, 36, 0.92)', softText: 'rgba(252, 211, 77, 0.72)', orb: 'rgba(251, 191, 36, 0.20)', bar: '#f59e0b' },
+                { text: 'rgba(251, 113, 133, 0.92)', softText: 'rgba(253, 164, 175, 0.72)', orb: 'rgba(251, 113, 133, 0.22)', bar: '#f43f5e' },
+                { text: 'rgba(45, 212, 191, 0.92)', softText: 'rgba(94, 234, 212, 0.72)', orb: 'rgba(45, 212, 191, 0.22)', bar: '#14b8a6' }
             ],
             light: [
-                { text: '#2563eb', border: 'rgba(37, 99, 235, 0.4)', bar: '#2563eb', glow: '0 10px 30px rgba(37, 99, 235, 0.15)' },
-                { text: '#059669', border: 'rgba(5, 150, 105, 0.4)', bar: '#059669', glow: '0 10px 30px rgba(5, 150, 105, 0.15)' },
-                { text: '#7c3aed', border: 'rgba(124, 58, 237, 0.4)', bar: '#7c3aed', glow: '0 10px 30px rgba(124, 58, 237, 0.15)' },
-                { text: '#d97706', border: 'rgba(217, 119, 6, 0.4)', bar: '#d97706', glow: '0 10px 30px rgba(217, 119, 6, 0.15)' },
-                { text: '#e11d48', border: 'rgba(225, 29, 72, 0.4)', bar: '#e11d48', glow: '0 10px 30px rgba(225, 29, 72, 0.15)' },
-                { text: '#0d9488', border: 'rgba(13, 148, 136, 0.4)', bar: '#0d9488', glow: '0 10px 30px rgba(13, 148, 136, 0.15)' }
+                { text: 'rgba(37, 99, 235, 0.92)', softText: 'rgba(37, 99, 235, 0.70)', orb: 'rgba(59, 130, 246, 0.28)', bar: '#2563eb' },
+                { text: 'rgba(5, 150, 105, 0.92)', softText: 'rgba(5, 150, 105, 0.70)', orb: 'rgba(16, 185, 129, 0.28)', bar: '#059669' },
+                { text: 'rgba(124, 58, 237, 0.92)', softText: 'rgba(124, 58, 237, 0.70)', orb: 'rgba(139, 92, 246, 0.28)', bar: '#7c3aed' },
+                { text: 'rgba(217, 119, 6, 0.92)', softText: 'rgba(180, 83, 9, 0.70)', orb: 'rgba(245, 158, 11, 0.28)', bar: '#d97706' },
+                { text: 'rgba(225, 29, 72, 0.92)', softText: 'rgba(190, 18, 60, 0.70)', orb: 'rgba(244, 63, 94, 0.26)', bar: '#e11d48' },
+                { text: 'rgba(13, 148, 136, 0.92)', softText: 'rgba(15, 118, 110, 0.70)', orb: 'rgba(20, 184, 166, 0.28)', bar: '#0d9488' }
             ]
         };
 
         const DRIFT_ORB_CLASSES = [
-            'bg-blue-400/20 dark:bg-blue-500/15',
-            'bg-emerald-400/20 dark:bg-emerald-500/15',
-            'bg-purple-400/20 dark:bg-purple-500/15',
-            'bg-teal-400/20 dark:bg-teal-500/15'
+            'bg-blue-400/30 dark:bg-blue-500/20',
+            'bg-emerald-400/30 dark:bg-emerald-500/20',
+            'bg-purple-400/30 dark:bg-purple-500/20',
+            'bg-teal-400/30 dark:bg-teal-500/20'
         ];
 
         const burnInState = {
             elapsed: 0,
+            motionElapsed: 0,
+            colorAngle: 0,
             lastFrameTime: null,
-            x: 0,
-            y: 0,
-            vx: 68,
-            vy: 52,
+            orbX: 0,
+            orbY: 0,
+            vx: 85,
+            vy: 65,
             bounceColorIdx: 0,
+            lastBounceColorShift: 0,
             driftOrbIdx: 0,
             lastOrbShift: 0,
-            isHoveringCard: false,
             idleTimer: null,
             particles: []
         };
 
         const isDarkMode = () => document.documentElement.classList.contains('dark');
+
+        const createParticle = (w, h) => ({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: 1.2 + Math.random() * 2.4,
+            vx: (Math.random() - 0.5) * 22,
+            vy: -8 - Math.random() * 18,
+            phase: Math.random() * Math.PI * 2,
+            colorTimer: Math.random() * 4,
+            colorSlot: Math.floor(Math.random() * 3)
+        });
 
         const initParticles = () => {
             const w = window.innerWidth || 1024;
@@ -608,48 +725,69 @@ HTML_TEMPLATE = """
                 els.burnInCanvas.width = w;
                 els.burnInCanvas.height = h;
             }
-            const count = 65;
-            burnInState.particles = Array.from({ length: count }, () => ({
-                x: Math.random() * w,
-                y: Math.random() * h,
-                r: 1.2 + Math.random() * 2.4,
-                vx: (Math.random() - 0.5) * 22,
-                vy: -8 - Math.random() * 18,
-                phase: Math.random() * Math.PI * 2,
-                colorSlot: Math.floor(Math.random() * 3)
-            }));
+            const count = Math.max(10, Math.min(250, parseInt(appState.settings.burnInParticles) || 65));
+            burnInState.particles = Array.from({ length: count }, () => createParticle(w, h));
+        };
+
+        const syncParticleCount = () => {
+            const w = window.innerWidth || 1024;
+            const h = window.innerHeight || 768;
+            const target = Math.max(10, Math.min(250, parseInt(appState.settings.burnInParticles) || 65));
+            while (burnInState.particles.length < target) {
+                burnInState.particles.push(createParticle(w, h));
+            }
+            if (burnInState.particles.length > target) {
+                burnInState.particles.length = target;
+            }
+        };
+
+        const applyAuroraSpeed = () => {
+            if (!els.burnInAuroraLayer) return;
+            const speedMult = Math.max(0.1, (parseInt(appState.settings.burnInSpeed) || 100) / 100);
+            const b1 = els.burnInAuroraLayer.querySelector('.aurora-blob-1');
+            const b2 = els.burnInAuroraLayer.querySelector('.aurora-blob-2');
+            const b3 = els.burnInAuroraLayer.querySelector('.aurora-blob-3');
+            if (b1) b1.style.animationDuration = `${(18 / speedMult).toFixed(2)}s`;
+            if (b2) b2.style.animationDuration = `${(22 / speedMult).toFixed(2)}s`;
+            if (b3) b3.style.animationDuration = `${(26 / speedMult).toFixed(2)}s`;
         };
 
         const applyBounceAccent = () => {
             if (!appState.settings.burnInEnabled || appState.settings.burnInMode !== 'bounce') {
                 els.display.style.color = '';
-                els.display.style.textShadow = '';
-                els.mainCard.style.borderColor = '';
-                els.mainCard.style.boxShadow = '';
                 els.progressBar.style.backgroundColor = '';
                 els.brandIconBox.style.backgroundColor = '';
+                if (els.burnInBounceOrb) els.burnInBounceOrb.style.backgroundColor = '';
                 return;
             }
             const palette = isDarkMode() ? BOUNCE_PALETTES.dark : BOUNCE_PALETTES.light;
             const swatch = palette[burnInState.bounceColorIdx % palette.length];
-            els.display.style.color = swatch.text;
-            els.display.style.textShadow = swatch.glow;
-            els.mainCard.style.borderColor = swatch.border;
-            els.mainCard.style.boxShadow = swatch.glow;
+            const isIdle = document.body.classList.contains('burn-in-idle');
+            els.display.style.color = isIdle ? swatch.softText : swatch.text;
             els.progressBar.style.backgroundColor = swatch.bar;
             els.brandIconBox.style.backgroundColor = swatch.bar;
+            if (els.burnInBounceOrb) {
+                els.burnInBounceOrb.style.backgroundColor = swatch.orb;
+            }
         };
 
-        const resetIdleDimTimer = () => {
-            document.body.classList.remove('burn-in-idle');
+        const scheduleIdleDim = () => {
             if (burnInState.idleTimer) clearTimeout(burnInState.idleTimer);
-            if (appState.settings.burnInEnabled) {
-                burnInState.idleTimer = setTimeout(() => {
-                    if (appState.settings.burnInEnabled && !burnInState.isHoveringCard) {
-                        document.body.classList.add('burn-in-idle');
-                    }
-                }, 3000);
-            }
+            if (!appState.settings.burnInEnabled) return;
+            burnInState.idleTimer = setTimeout(() => {
+                const modalOpen = !els.modal.classList.contains('hidden');
+                if (appState.settings.burnInEnabled && !modalOpen) {
+                    document.body.classList.add('burn-in-idle');
+                    applyBounceAccent();
+                }
+            }, BURN_IN_IDLE_TIMEOUT_MS);
+        };
+
+        const wakeBurnInMenu = () => {
+            if (!appState.settings.burnInEnabled) return;
+            document.body.classList.remove('burn-in-idle');
+            applyBounceAccent();
+            scheduleIdleDim();
         };
 
         const updateToggleKnobUI = (btnEl, enabled) => {
@@ -668,7 +806,7 @@ HTML_TEMPLATE = """
             }
         };
 
-        const applyBurnInState = () => {
+        const applyBurnInState = (startDimmed = true) => {
             const enabled = Boolean(appState.settings.burnInEnabled);
             const mode = VALID_BURN_IN_MODES.includes(appState.settings.burnInMode)
                 ? appState.settings.burnInMode
@@ -679,19 +817,37 @@ HTML_TEMPLATE = """
             if (els.inputs.burnInMode) {
                 els.inputs.burnInMode.value = mode;
             }
+            if (els.inputs.burnInSpeed) {
+                els.inputs.burnInSpeed.value = appState.settings.burnInSpeed;
+                els.inputs.burnInSpeedVal.textContent = `${appState.settings.burnInSpeed}%`;
+            }
+            if (els.inputs.burnInColorSpeed) {
+                els.inputs.burnInColorSpeed.value = appState.settings.burnInColorSpeed;
+                els.inputs.burnInColorSpeedVal.textContent = `${appState.settings.burnInColorSpeed}%`;
+            }
+            if (els.inputs.burnInParticles) {
+                els.inputs.burnInParticles.value = appState.settings.burnInParticles;
+                els.inputs.burnInParticlesVal.textContent = `${appState.settings.burnInParticles}`;
+            }
+
+            syncParticleCount();
+            applyAuroraSpeed();
 
             if (!enabled) {
+                if (burnInState.idleTimer) clearTimeout(burnInState.idleTimer);
                 document.body.classList.remove('burn-in-active', 'burn-in-idle');
                 els.burnInBackdrop.classList.add('hidden');
                 els.burnInDriftGlow.classList.replace('opacity-100', 'opacity-0');
+                els.burnInBounceLayer.classList.replace('opacity-100', 'opacity-0');
                 els.burnInAuroraLayer.classList.replace('opacity-100', 'opacity-0');
                 els.burnInCanvas.classList.replace('opacity-100', 'opacity-0');
-                els.appContainer.style.transform = '';
                 els.burnInDriftOrb.style.transform = '';
-                els.mainCard.classList.remove('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
-                els.mainCard.classList.add('bg-white', 'dark:bg-slate-800');
-                burnInState.x = 0;
-                burnInState.y = 0;
+                els.burnInDriftGlow.style.filter = '';
+                els.burnInAuroraLayer.style.filter = '';
+                if (els.burnInDriftOrbSecondary) els.burnInDriftOrbSecondary.style.transform = '';
+                if (els.burnInBounceOrb) els.burnInBounceOrb.style.transform = '';
+                burnInState.orbX = 0;
+                burnInState.orbY = 0;
                 burnInState.lastFrameTime = null;
                 applyBounceAccent();
                 return;
@@ -702,31 +858,29 @@ HTML_TEMPLATE = """
 
             // Toggle mode-specific backdrop layers
             const setLayerOpacity = (el, visible) => {
+                if (!el) return;
                 el.classList.toggle('opacity-100', visible);
                 el.classList.toggle('opacity-0', !visible);
             };
             setLayerOpacity(els.burnInDriftGlow, mode === 'drift');
+            setLayerOpacity(els.burnInBounceLayer, mode === 'bounce');
             setLayerOpacity(els.burnInAuroraLayer, mode === 'aurora');
             setLayerOpacity(els.burnInCanvas, mode === 'starfield');
-
-            // Translucent glass card in Aurora and Starfield modes
-            if (mode === 'aurora' || mode === 'starfield') {
-                els.mainCard.classList.remove('bg-white', 'dark:bg-slate-800');
-                els.mainCard.classList.add('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
-            } else {
-                els.mainCard.classList.remove('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
-                els.mainCard.classList.add('bg-white', 'dark:bg-slate-800');
-            }
 
             if (mode === 'starfield' && burnInState.particles.length === 0) {
                 initParticles();
             }
 
+            if (startDimmed) {
+                document.body.classList.add('burn-in-idle');
+                if (burnInState.idleTimer) clearTimeout(burnInState.idleTimer);
+            } else {
+                scheduleIdleDim();
+            }
             applyBounceAccent();
-            resetIdleDimTimer();
         };
 
-        const renderStarfield = (dt) => {
+        const renderStarfield = (dt, speedMult, colorSpeedMult) => {
             if (!els.burnInCanvas) return;
             const ctx = els.burnInCanvas.getContext('2d');
             if (!ctx) return;
@@ -735,14 +889,20 @@ HTML_TEMPLATE = """
             ctx.clearRect(0, 0, w, h);
 
             const dark = isDarkMode();
-            const darkColors = ['186, 230, 253', '199, 210, 254', '167, 243, 208'];
-            const lightColors = ['59, 130, 246', '99, 102, 241', '14, 165, 233'];
+            const darkColors = ['186, 230, 253', '199, 210, 254', '167, 243, 208', '245, 208, 254'];
+            const lightColors = ['59, 130, 246', '99, 102, 241', '14, 165, 233', '16, 185, 129'];
             const palette = dark ? darkColors : lightColors;
+            const shiftInterval = Math.max(0.4, 3.5 / colorSpeedMult);
 
             for (const p of burnInState.particles) {
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
-                p.phase += dt * 1.8;
+                p.x += p.vx * dt * speedMult;
+                p.y += p.vy * dt * speedMult;
+                p.phase += dt * 1.8 * colorSpeedMult;
+                p.colorTimer = (p.colorTimer || 0) + dt;
+                if (p.colorTimer >= shiftInterval) {
+                    p.colorTimer = 0;
+                    p.colorSlot = (p.colorSlot + 1) % palette.length;
+                }
 
                 if (p.x < -10) p.x = w + 10;
                 if (p.x > w + 10) p.x = -10;
@@ -772,73 +932,79 @@ HTML_TEMPLATE = """
             const dt = Math.min(0.05, (timestamp - burnInState.lastFrameTime) / 1000);
             burnInState.lastFrameTime = timestamp;
 
+            const speedMult = Math.max(0.1, (parseInt(appState.settings.burnInSpeed) || 100) / 100);
+            const colorSpeedMult = Math.max(0.1, (parseInt(appState.settings.burnInColorSpeed) || 100) / 100);
+
             const mode = appState.settings.burnInMode;
             if (mode === 'starfield') {
-                renderStarfield(dt);
-            }
-
-            // Pause card movement while user hovers over the card or has the Settings modal open
-            const modalOpen = !els.modal.classList.contains('hidden');
-            if (burnInState.isHoveringCard || modalOpen) {
-                return;
+                renderStarfield(dt, speedMult, colorSpeedMult);
             }
 
             burnInState.elapsed += dt;
-            const t = burnInState.elapsed;
+            burnInState.motionElapsed += dt * speedMult;
+            burnInState.colorAngle = (burnInState.colorAngle + dt * 22 * colorSpeedMult) % 360;
 
-            const cardW = els.appContainer.offsetWidth || 380;
-            const cardH = els.appContainer.offsetHeight || 420;
-            const maxX = Math.max(20, (window.innerWidth - cardW) / 2 - 16);
-            const maxY = Math.max(20, (window.innerHeight - cardH) / 2 - 16);
+            const t = burnInState.elapsed;
+            const mt = burnInState.motionElapsed;
+
+            const maxX = Math.max(80, window.innerWidth * 0.28);
+            const maxY = Math.max(60, window.innerHeight * 0.24);
 
             if (mode === 'drift') {
-                burnInState.x = Math.sin(t * 0.35) * maxX;
-                burnInState.y = Math.sin(t * 0.23) * maxY;
-                els.burnInDriftOrb.style.transform = `translate3d(${(burnInState.x * 0.6).toFixed(1)}px, ${(burnInState.y * 0.6).toFixed(1)}px, 0)`;
+                const x1 = Math.sin(mt * 0.35) * maxX;
+                const y1 = Math.sin(mt * 0.23) * maxY;
+                const x2 = Math.cos(mt * 0.27) * (maxX * 0.85);
+                const y2 = Math.sin(mt * 0.41) * (maxY * 0.85);
+                els.burnInDriftOrb.style.transform = `translate3d(${x1.toFixed(1)}px, ${y1.toFixed(1)}px, 0)`;
+                if (els.burnInDriftOrbSecondary) {
+                    els.burnInDriftOrbSecondary.style.transform = `translate3d(${x2.toFixed(1)}px, ${y2.toFixed(1)}px, 0)`;
+                }
+                els.burnInDriftGlow.style.filter = `hue-rotate(${burnInState.colorAngle.toFixed(1)}deg)`;
 
-                if (t - burnInState.lastOrbShift > 8) {
+                const orbShiftInterval = Math.max(1.2, 8 / colorSpeedMult);
+                if (t - burnInState.lastOrbShift > orbShiftInterval) {
                     burnInState.lastOrbShift = t;
                     burnInState.driftOrbIdx = (burnInState.driftOrbIdx + 1) % DRIFT_ORB_CLASSES.length;
-                    els.burnInDriftOrb.className = `w-96 h-96 rounded-full blur-3xl transition-colors duration-1000 ${DRIFT_ORB_CLASSES[burnInState.driftOrbIdx]}`;
+                    els.burnInDriftOrb.className = `w-[28rem] h-[28rem] rounded-full blur-3xl transition-colors duration-1000 ${DRIFT_ORB_CLASSES[burnInState.driftOrbIdx]}`;
                 }
             } else if (mode === 'bounce') {
-                burnInState.x += burnInState.vx * dt;
-                burnInState.y += burnInState.vy * dt;
+                burnInState.orbX += burnInState.vx * dt * speedMult;
+                burnInState.orbY += burnInState.vy * dt * speedMult;
                 let bounced = false;
 
-                if (burnInState.x >= maxX) {
-                    burnInState.x = maxX;
+                if (burnInState.orbX >= maxX) {
+                    burnInState.orbX = maxX;
                     burnInState.vx = -Math.abs(burnInState.vx);
                     bounced = true;
-                } else if (burnInState.x <= -maxX) {
-                    burnInState.x = -maxX;
+                } else if (burnInState.orbX <= -maxX) {
+                    burnInState.orbX = -maxX;
                     burnInState.vx = Math.abs(burnInState.vx);
                     bounced = true;
                 }
 
-                if (burnInState.y >= maxY) {
-                    burnInState.y = maxY;
+                if (burnInState.orbY >= maxY) {
+                    burnInState.orbY = maxY;
                     burnInState.vy = -Math.abs(burnInState.vy);
                     bounced = true;
-                } else if (burnInState.y <= -maxY) {
-                    burnInState.y = -maxY;
+                } else if (burnInState.orbY <= -maxY) {
+                    burnInState.orbY = -maxY;
                     burnInState.vy = Math.abs(burnInState.vy);
                     bounced = true;
                 }
 
-                if (bounced) {
+                if (els.burnInBounceOrb) {
+                    els.burnInBounceOrb.style.transform = `translate3d(${burnInState.orbX.toFixed(1)}px, ${burnInState.orbY.toFixed(1)}px, 0)`;
+                }
+
+                const timedShiftInterval = Math.max(1.0, 6 / colorSpeedMult);
+                if (bounced || (t - burnInState.lastBounceColorShift > timedShiftInterval)) {
+                    burnInState.lastBounceColorShift = t;
                     burnInState.bounceColorIdx = (burnInState.bounceColorIdx + 1) % BOUNCE_PALETTES.dark.length;
                     applyBounceAccent();
                 }
             } else if (mode === 'aurora') {
-                burnInState.x = Math.sin(t * 0.27) * (maxX * 0.85);
-                burnInState.y = Math.cos(t * 0.19) * (maxY * 0.85);
-            } else if (mode === 'starfield') {
-                burnInState.x = Math.cos(t * 0.29) * (maxX * 0.85);
-                burnInState.y = Math.sin(t * 0.41) * (maxY * 0.85);
+                els.burnInAuroraLayer.style.filter = `hue-rotate(${burnInState.colorAngle.toFixed(1)}deg)`;
             }
-
-            els.appContainer.style.transform = `translate3d(${burnInState.x.toFixed(2)}px, ${burnInState.y.toFixed(2)}px, 0)`;
         };
 
         // --- Storage & Persistence ---
@@ -854,7 +1020,10 @@ HTML_TEMPLATE = """
                 theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
                 notificationsEnabled: appState.settings.notificationsEnabled,
                 burnInEnabled: appState.settings.burnInEnabled,
-                burnInMode: appState.settings.burnInMode
+                burnInMode: appState.settings.burnInMode,
+                burnInSpeed: appState.settings.burnInSpeed,
+                burnInColorSpeed: appState.settings.burnInColorSpeed,
+                burnInParticles: appState.settings.burnInParticles
             };
             localStorage.setItem('eyeTimerSettings', JSON.stringify(data));
         };
@@ -886,6 +1055,15 @@ HTML_TEMPLATE = """
                 appState.settings.burnInEnabled = Boolean(data.burnInEnabled ?? false);
                 if (data.burnInMode && VALID_BURN_IN_MODES.includes(data.burnInMode)) {
                     appState.settings.burnInMode = data.burnInMode;
+                }
+                if (data.burnInSpeed !== undefined) {
+                    appState.settings.burnInSpeed = Math.max(10, Math.min(300, parseInt(data.burnInSpeed) || 100));
+                }
+                if (data.burnInColorSpeed !== undefined) {
+                    appState.settings.burnInColorSpeed = Math.max(10, Math.min(300, parseInt(data.burnInColorSpeed) || 100));
+                }
+                if (data.burnInParticles !== undefined) {
+                    appState.settings.burnInParticles = Math.max(10, Math.min(250, parseInt(data.burnInParticles) || 65));
                 }
 
                 // Apply to Audio
@@ -1093,11 +1271,15 @@ HTML_TEMPLATE = """
 
         // Settings Modal
         document.getElementById('open-settings').addEventListener('click', () => {
+            if (burnInState.idleTimer) clearTimeout(burnInState.idleTimer);
             els.modal.classList.remove('hidden');
         });
 
         document.getElementById('close-settings').addEventListener('click', () => {
             els.modal.classList.add('hidden');
+            if (appState.settings.burnInEnabled && !document.body.classList.contains('burn-in-idle')) {
+                scheduleIdleDim();
+            }
         });
 
         // Volume Slider
@@ -1121,9 +1303,12 @@ HTML_TEMPLATE = """
             appState.settings.repeatCount = parseInt(els.inputs.repeatCount.value);
             appState.settings.repeatDelay = parseInt(els.inputs.repeatDelay.value);
             appState.settings.burnInMode = els.inputs.burnInMode.value;
+            appState.settings.burnInSpeed = parseInt(els.inputs.burnInSpeed.value) || 100;
+            appState.settings.burnInColorSpeed = parseInt(els.inputs.burnInColorSpeed.value) || 100;
+            appState.settings.burnInParticles = parseInt(els.inputs.burnInParticles.value) || 65;
             
             audio.setType(appState.settings.soundType);
-            applyBurnInState();
+            applyBurnInState(true);
             
             saveSettings(); // Save to LocalStorage
             resetTimer();
@@ -1155,10 +1340,10 @@ HTML_TEMPLATE = """
             saveSettings();
         });
 
-        // Dynamic Screen (Anti-Burn-In) Toggle & Mode Selector
+        // Dynamic Screen (Anti-Burn-In) Toggle, Mode Selector & Tuning Sliders
         els.inputs.burnInToggle.addEventListener('click', () => {
             appState.settings.burnInEnabled = !appState.settings.burnInEnabled;
-            applyBurnInState();
+            applyBurnInState(true);
             saveSettings();
         });
 
@@ -1166,22 +1351,41 @@ HTML_TEMPLATE = """
             const selectedMode = e.target.value;
             if (VALID_BURN_IN_MODES.includes(selectedMode)) {
                 appState.settings.burnInMode = selectedMode;
-                applyBurnInState();
+                applyBurnInState(true);
                 saveSettings();
             }
         });
 
-        // Card hover & activity listeners for smooth interaction during Anti-Burn-In mode
-        els.appContainer.addEventListener('mouseenter', () => {
-            burnInState.isHoveringCard = true;
-            document.body.classList.remove('burn-in-idle');
+        els.inputs.burnInSpeed.addEventListener('input', (e) => {
+            const val = Math.max(10, Math.min(300, parseInt(e.target.value) || 100));
+            appState.settings.burnInSpeed = val;
+            els.inputs.burnInSpeedVal.textContent = `${val}%`;
+            applyAuroraSpeed();
+            saveSettings();
         });
-        els.appContainer.addEventListener('mouseleave', () => {
-            burnInState.isHoveringCard = false;
-            resetIdleDimTimer();
+
+        els.inputs.burnInColorSpeed.addEventListener('input', (e) => {
+            const val = Math.max(10, Math.min(300, parseInt(e.target.value) || 100));
+            appState.settings.burnInColorSpeed = val;
+            els.inputs.burnInColorSpeedVal.textContent = `${val}%`;
+            saveSettings();
         });
-        window.addEventListener('mousemove', resetIdleDimTimer, { passive: true });
-        window.addEventListener('touchstart', resetIdleDimTimer, { passive: true });
+
+        els.inputs.burnInParticles.addEventListener('input', (e) => {
+            const val = Math.max(10, Math.min(250, parseInt(e.target.value) || 65));
+            appState.settings.burnInParticles = val;
+            els.inputs.burnInParticlesVal.textContent = `${val}`;
+            syncParticleCount();
+            saveSettings();
+        });
+
+        // Click anywhere on the screen (outside Settings modal) to show the full timer menu for 15s
+        document.addEventListener('click', (e) => {
+            if (!appState.settings.burnInEnabled) return;
+            if (!els.modal.classList.contains('hidden') || els.modal.contains(e.target)) return;
+            wakeBurnInMenu();
+        });
+
         window.addEventListener('resize', () => {
             if (appState.settings.burnInEnabled && appState.settings.burnInMode === 'starfield') {
                 initParticles();
