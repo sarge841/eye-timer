@@ -74,121 +74,206 @@ HTML_TEMPLATE = """
             background: #4b5563;
             border-radius: 2px;
         }
+
+        /* Dynamic Screen / Anti-Burn-In Styles */
+        body.burn-in-active {
+            overflow: hidden;
+            user-select: none;
+        }
+        html.dark body.burn-in-active {
+            background-color: #020617;
+        }
+        html:not(.dark) body.burn-in-active {
+            background-color: #f1f5f9;
+        }
+
+        .burn-in-dimmable {
+            transition: opacity 0.6s ease;
+        }
+        body.burn-in-active.burn-in-idle .burn-in-dimmable {
+            opacity: 0.22;
+        }
+        body.burn-in-active #app:hover .burn-in-dimmable {
+            opacity: 1 !important;
+        }
+
+        /* Aurora animated blobs */
+        @keyframes auroraFloat1 {
+            0%, 100% { transform: translate(-15%, -10%) scale(1) rotate(0deg); }
+            33% { transform: translate(20%, 15%) scale(1.2) rotate(45deg); }
+            66% { transform: translate(-10%, 25%) scale(0.9) rotate(-30deg); }
+        }
+        @keyframes auroraFloat2 {
+            0%, 100% { transform: translate(15%, 10%) scale(1.1) rotate(0deg); }
+            33% { transform: translate(-25%, -15%) scale(0.9) rotate(-40deg); }
+            66% { transform: translate(15%, -20%) scale(1.25) rotate(35deg); }
+        }
+        @keyframes auroraFloat3 {
+            0%, 100% { transform: translate(0%, 20%) scale(0.95) rotate(0deg); }
+            50% { transform: translate(20%, -20%) scale(1.15) rotate(60deg); }
+        }
+        .aurora-blob-1 { animation: auroraFloat1 18s ease-in-out infinite; }
+        .aurora-blob-2 { animation: auroraFloat2 22s ease-in-out infinite; }
+        .aurora-blob-3 { animation: auroraFloat3 26s ease-in-out infinite; }
     </style>
 </head>
-<body class="bg-gray-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex items-center justify-center transition-colors duration-300">
+<body class="bg-gray-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex items-center justify-center transition-colors duration-300 relative">
 
-    <!-- Main App Container -->
-    <div id="app" class="w-full max-w-md p-6 mx-4 relative">
-        
-        <!-- Settings Modal -->
-        <div id="settings-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
-            <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 dark:border-slate-700 transform transition-all scale-100">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-xl font-bold">Settings</h2>
-                    <button id="close-settings" class="text-gray-500 hover:text-brand-500 transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+    <!-- Dynamic Screen (Anti-Burn-In) Fullscreen Backdrop & Canvas -->
+    <div id="burn-in-backdrop" class="fixed inset-0 pointer-events-none overflow-hidden z-0 hidden">
+        <!-- Ambient glow for Drift mode -->
+        <div id="burn-in-drift-glow" class="absolute inset-0 opacity-0 transition-opacity duration-700 flex items-center justify-center">
+            <div id="burn-in-drift-orb" class="w-96 h-96 rounded-full blur-3xl transition-colors duration-1000 bg-blue-400/20 dark:bg-blue-500/15"></div>
+        </div>
+        <!-- Aurora layers for Aurora mode -->
+        <div id="burn-in-aurora-layer" class="absolute inset-0 opacity-0 transition-opacity duration-700">
+            <div class="aurora-blob-1 absolute top-1/4 left-1/4 w-[28rem] h-[28rem] rounded-full blur-3xl bg-sky-300/45 dark:bg-emerald-500/20"></div>
+            <div class="aurora-blob-2 absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] rounded-full blur-3xl bg-purple-300/45 dark:bg-indigo-500/20"></div>
+            <div class="aurora-blob-3 absolute top-1/3 right-1/3 w-[26rem] h-[26rem] rounded-full blur-3xl bg-teal-200/45 dark:bg-cyan-500/15"></div>
+        </div>
+        <!-- Particle Canvas for Starfield / Cosmic Drift mode -->
+        <canvas id="burn-in-canvas" class="absolute inset-0 w-full h-full opacity-0 transition-opacity duration-700"></canvas>
+    </div>
+
+    <!-- Settings Modal (Placed outside #app so transform on #app does not affect fixed positioning) -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700 transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">Settings</h2>
+                <button id="close-settings" class="text-gray-500 hover:text-brand-500 transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="space-y-5">
+                <!-- Focus Duration -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Focus Duration (minutes)</label>
+                    <input type="number" id="focus-input" value="20" min="1" max="120" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
                 </div>
 
-                <div class="space-y-5">
-                    <!-- Focus Duration -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Focus Duration (minutes)</label>
-                        <input type="number" id="focus-input" value="20" min="1" max="120" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
-                    </div>
+                <!-- Break Duration -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Break Duration (seconds)</label>
+                    <input type="number" id="break-input" value="20" min="5" max="300" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                </div>
 
-                    <!-- Break Duration -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Break Duration (seconds)</label>
-                        <input type="number" id="break-input" value="20" min="5" max="300" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
-                    </div>
-
-                    <!-- Sound Type -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Notification Sound</label>
-                        <div class="flex gap-3">
-                            <select id="sound-type" class="flex-1 bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
-                                <option value="chime">Gentle Chime</option>
-                                <option value="digital">Digital Beep</option>
-                                <option value="harp">Harp Flow</option>
-                                <option value="hd2">Menacing (Kinda quiet)</option>
-                            </select>
-                            
-                            <!-- TEST SOUND BUTTON -->
-                            <button id="btn-test-sound" title="Test Sound" class="shrink-0 bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-300 hover:text-brand-500 dark:hover:text-white hover:bg-brand-100 dark:hover:bg-brand-600 w-10 rounded-lg transition flex items-center justify-center border border-transparent hover:border-brand-500">
-                                <i class="fa-solid fa-volume-high"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Volume -->
-                    <div>
-                        <div class="flex justify-between mb-1">
-                            <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Volume</label>
-                            <span id="volume-val" class="text-xs font-mono bg-slate-200 dark:bg-slate-600 px-2 rounded">50%</span>
-                        </div>
-                        <input type="range" id="volume-input" min="0" max="100" value="50" class="w-full">
-                    </div>
-
-                    <!-- Repeat Count -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Repeat Count</label>
-                        <input type="number" id="repeat-count" value="1" min="1" max="10" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
-                    </div>
-
-                    <!-- Repeat Delay -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Repeat Delay (seconds)</label>
-                        <input type="number" id="repeat-delay" value="1" min="1" max="10" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
-                    </div>
-
-                    <!-- Dark Mode Toggle -->
-                    <div class="flex items-center justify-between pt-2">
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Dark Mode</label>
-                        <button id="theme-toggle" class="w-12 h-6 bg-slate-300 dark:bg-brand-600 rounded-full relative transition-colors duration-300">
-                            <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 dark:left-7 transition-all duration-300 shadow-sm"></div>
+                <!-- Sound Type -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Notification Sound</label>
+                    <div class="flex gap-3">
+                        <select id="sound-type" class="flex-1 bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                            <option value="chime">Gentle Chime</option>
+                            <option value="digital">Digital Beep</option>
+                            <option value="harp">Harp Flow</option>
+                            <option value="hd2">Menacing (Kinda quiet)</option>
+                        </select>
+                        
+                        <!-- TEST SOUND BUTTON -->
+                        <button id="btn-test-sound" title="Test Sound" class="shrink-0 bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-300 hover:text-brand-500 dark:hover:text-white hover:bg-brand-100 dark:hover:bg-brand-600 w-10 rounded-lg transition flex items-center justify-center border border-transparent hover:border-brand-500">
+                            <i class="fa-solid fa-volume-high"></i>
                         </button>
                     </div>
+                </div>
 
-                    <!-- Enable Notifications Toggle -->
-                    <div class="flex items-center justify-between pt-2">
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Enable Desktop Notifications</label>
-                        <!-- Independent toggle (not theme-dependent) -->
-                        <button id="notification-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-brand-600">
-                            <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-7 transition-all duration-300 shadow-sm"></div>
-                        </button>
+                <!-- Volume -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Volume</label>
+                        <span id="volume-val" class="text-xs font-mono bg-slate-200 dark:bg-slate-600 px-2 rounded">50%</span>
                     </div>
+                    <input type="range" id="volume-input" min="0" max="100" value="50" class="w-full">
+                </div>
 
-                    <!-- Reverse Sound On Break End Toggle -->
-                    <div class="flex items-center justify-between pt-2">
-                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Reverse Sound On Break End</label>
-                        <button id="reverse-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-slate-300">
+                <!-- Repeat Count -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Repeat Count</label>
+                    <input type="number" id="repeat-count" value="1" min="1" max="10" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                </div>
+
+                <!-- Repeat Delay -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Repeat Delay (seconds)</label>
+                    <input type="number" id="repeat-delay" value="1" min="1" max="10" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                </div>
+
+                <!-- Dark Mode Toggle -->
+                <div class="flex items-center justify-between pt-2">
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Dark Mode</label>
+                    <button id="theme-toggle" class="w-12 h-6 bg-slate-300 dark:bg-brand-600 rounded-full relative transition-colors duration-300">
+                        <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 dark:left-7 transition-all duration-300 shadow-sm"></div>
+                    </button>
+                </div>
+
+                <!-- Enable Notifications Toggle -->
+                <div class="flex items-center justify-between pt-2">
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Enable Desktop Notifications</label>
+                    <!-- Independent toggle (not theme-dependent) -->
+                    <button id="notification-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-brand-600">
+                        <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-7 transition-all duration-300 shadow-sm"></div>
+                    </button>
+                </div>
+
+                <!-- Reverse Sound On Break End Toggle -->
+                <div class="flex items-center justify-between pt-2">
+                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Reverse Sound On Break End</label>
+                    <button id="reverse-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-slate-300">
+                        <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-all duration-300 shadow-sm"></div>
+                    </button>
+                </div>
+
+                <!-- Screen Burn-In Protection Section -->
+                <div class="pt-3 border-t border-gray-100 dark:border-slate-700/60 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500 dark:text-gray-400">Dynamic Screen (Anti-Burn-In)</label>
+                            <p class="text-xs text-gray-400 dark:text-gray-500">Moves &amp; shifts UI to prevent screen burn-in</p>
+                        </div>
+                        <button id="burn-in-toggle" class="w-12 h-6 rounded-full relative transition-colors duration-300 bg-slate-300 shrink-0">
                             <div class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-all duration-300 shadow-sm"></div>
                         </button>
                     </div>
-                </div>
 
-                <div class="mt-8">
-                    <button id="save-settings" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-brand-500/20 transition-all active:scale-95">
-                        Save & Reset Timer
-                    </button>
+                    <div id="burn-in-mode-wrapper">
+                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Dynamic Screen Style</label>
+                        <select id="burn-in-mode" class="w-full bg-gray-100 dark:bg-slate-700 border-none rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 outline-none transition text-sm">
+                            <option value="drift">Gentle Orbit (Pixel Drift)</option>
+                            <option value="bounce">DVD Bounce (Color Shift)</option>
+                            <option value="aurora">Ambient Aurora (Waves &amp; Wander)</option>
+                            <option value="starfield">Cosmic Drift (Particles &amp; Wander)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
+
+            <div class="mt-8">
+                <button id="save-settings" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-brand-500/20 transition-all active:scale-95">
+                    Save & Reset Timer
+                </button>
+            </div>
         </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app" class="w-full max-w-md p-6 mx-4 relative z-10 will-change-transform">
 
         <!-- Main Card -->
-        <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-700 overflow-hidden">
+        <div id="main-card" class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-700 overflow-hidden transition-colors duration-500">
             
             <!-- Header -->
-            <div class="p-6 flex justify-between items-center border-b border-gray-100 dark:border-slate-700/50">
+            <div class="p-6 flex justify-between items-center border-b border-gray-100 dark:border-slate-700/50 burn-in-dimmable">
                 <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white">
+                    <div id="brand-icon-box" class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white transition-colors duration-500">
                         <i class="fa-solid fa-eye"></i>
                     </div>
                     <h1 class="font-bold text-lg tracking-tight">20-20-20</h1>
                 </div>
-                <button id="open-settings" class="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-center transition text-gray-500 dark:text-gray-400">
-                    <i class="fa-solid fa-gear"></i>
-                </button>
+                <div class="flex items-center gap-1">
+                    <button id="toggle-fullscreen" title="Toggle Fullscreen" aria-label="Toggle Fullscreen" class="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-center transition text-gray-500 dark:text-gray-400">
+                        <i id="fullscreen-icon" class="fa-solid fa-expand"></i>
+                    </button>
+                    <button id="open-settings" title="Settings" aria-label="Settings" class="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-center transition text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Timer Display -->
@@ -200,7 +285,7 @@ HTML_TEMPLATE = """
                 </div>
 
                 <!-- Timer Text -->
-                <div class="font-mono text-7xl font-bold tracking-tighter mb-2 tabular-nums" id="timer-display">
+                <div class="font-mono text-7xl font-bold tracking-tighter mb-2 tabular-nums transition-colors duration-500" id="timer-display">
                     20:00
                 </div>
                 
@@ -220,7 +305,7 @@ HTML_TEMPLATE = """
             </div>
 
             <!-- Controls -->
-            <div class="p-6 grid grid-cols-3 gap-4 bg-gray-50 dark:bg-slate-800/50">
+            <div id="controls-panel" class="p-6 grid grid-cols-3 gap-4 bg-gray-50 dark:bg-slate-800/50 burn-in-dimmable transition-colors duration-500">
                 <button id="btn-reset" class="py-4 rounded-xl text-gray-500 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-gray-200 transition flex flex-col items-center justify-center gap-1 group">
                     <i class="fa-solid fa-rotate-right text-xl group-hover:-rotate-180 transition-transform duration-500"></i>
                     <span class="text-xs font-bold">Reset</span>
@@ -238,8 +323,8 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
-        <div class="text-center mt-8 text-gray-400 text-xs">
-            <p>Look 20 feet away for 20 seconds every 20 minutes.</p>
+        <div class="text-center mt-8 text-gray-400 text-xs burn-in-dimmable">
+            <p id="footer-reminder-text">Look 20 feet away for 20 seconds every 20 minutes.</p>
         </div>
     </div>
 
@@ -385,14 +470,21 @@ HTML_TEMPLATE = """
                 notificationsEnabled: true,
                 reverseOnBreakEnd: false,
                 repeatCount: 1, // Default x
-                repeatDelay: 1  // Default y
+                repeatDelay: 1, // Default y
+                burnInEnabled: false,
+                burnInMode: 'drift' // 'drift' | 'bounce' | 'aurora' | 'starfield'
             }
         };
 
+        const VALID_BURN_IN_MODES = ['drift', 'bounce', 'aurora', 'starfield'];
         const audio = new SoundEngine();
 
         // DOM Elements
         const els = {
+            appContainer: document.getElementById('app'),
+            mainCard: document.getElementById('main-card'),
+            controlsPanel: document.getElementById('controls-panel'),
+            brandIconBox: document.getElementById('brand-icon-box'),
             display: document.getElementById('timer-display'),
             progressBar: document.getElementById('progress-bar'),
             statusBadge: document.getElementById('status-badge'),
@@ -402,7 +494,14 @@ HTML_TEMPLATE = """
             playText: document.getElementById('play-text'),
             btnReset: document.getElementById('btn-reset'),
             btnSkip: document.getElementById('btn-skip'),
+            btnFullscreen: document.getElementById('toggle-fullscreen'),
+            fullscreenIcon: document.getElementById('fullscreen-icon'),
             modal: document.getElementById('settings-modal'),
+            burnInBackdrop: document.getElementById('burn-in-backdrop'),
+            burnInDriftGlow: document.getElementById('burn-in-drift-glow'),
+            burnInDriftOrb: document.getElementById('burn-in-drift-orb'),
+            burnInAuroraLayer: document.getElementById('burn-in-aurora-layer'),
+            burnInCanvas: document.getElementById('burn-in-canvas'),
             inputs: {
                 focus: document.getElementById('focus-input'),
                 break: document.getElementById('break-input'),
@@ -413,8 +512,333 @@ HTML_TEMPLATE = """
                 reverse: document.getElementById('reverse-toggle'),
                 testBtn: document.getElementById('btn-test-sound'),
                 repeatCount: document.getElementById('repeat-count'),
-                repeatDelay: document.getElementById('repeat-delay')
+                repeatDelay: document.getElementById('repeat-delay'),
+                burnInToggle: document.getElementById('burn-in-toggle'),
+                burnInMode: document.getElementById('burn-in-mode')
             }
+        };
+
+        // --- Fullscreen Logic ---
+        const isFullscreen = () => {
+            return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+        };
+
+        const updateFullscreenUI = () => {
+            if (!els.fullscreenIcon || !els.btnFullscreen) return;
+            if (isFullscreen()) {
+                els.fullscreenIcon.className = "fa-solid fa-compress";
+                els.btnFullscreen.title = "Exit Fullscreen";
+                els.btnFullscreen.setAttribute('aria-label', 'Exit Fullscreen');
+            } else {
+                els.fullscreenIcon.className = "fa-solid fa-expand";
+                els.btnFullscreen.title = "Toggle Fullscreen";
+                els.btnFullscreen.setAttribute('aria-label', 'Toggle Fullscreen');
+            }
+        };
+
+        const toggleFullscreen = () => {
+            try {
+                if (!isFullscreen()) {
+                    const docEl = document.documentElement;
+                    if (docEl.requestFullscreen) {
+                        docEl.requestFullscreen().catch(() => {});
+                    } else if (docEl.webkitRequestFullscreen) {
+                        docEl.webkitRequestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                }
+            } catch (err) {
+                // Ignore fullscreen errors in restricted environments
+            }
+        };
+
+        // --- Dynamic Screen (Anti-Burn-In) Engine ---
+        const BOUNCE_PALETTES = {
+            dark: [
+                { text: '#38bdf8', border: 'rgba(56, 189, 248, 0.45)', bar: '#0ea5e9', glow: '0 0 28px rgba(56, 189, 248, 0.25)' },
+                { text: '#34d399', border: 'rgba(52, 211, 153, 0.45)', bar: '#10b981', glow: '0 0 28px rgba(52, 211, 153, 0.25)' },
+                { text: '#a78bfa', border: 'rgba(167, 139, 250, 0.45)', bar: '#8b5cf6', glow: '0 0 28px rgba(167, 139, 250, 0.25)' },
+                { text: '#fbbf24', border: 'rgba(251, 191, 36, 0.45)', bar: '#f59e0b', glow: '0 0 28px rgba(251, 191, 36, 0.25)' },
+                { text: '#fb7185', border: 'rgba(251, 113, 133, 0.45)', bar: '#f43f5e', glow: '0 0 28px rgba(251, 113, 133, 0.25)' },
+                { text: '#2dd4bf', border: 'rgba(45, 212, 191, 0.45)', bar: '#14b8a6', glow: '0 0 28px rgba(45, 212, 191, 0.25)' }
+            ],
+            light: [
+                { text: '#2563eb', border: 'rgba(37, 99, 235, 0.4)', bar: '#2563eb', glow: '0 10px 30px rgba(37, 99, 235, 0.15)' },
+                { text: '#059669', border: 'rgba(5, 150, 105, 0.4)', bar: '#059669', glow: '0 10px 30px rgba(5, 150, 105, 0.15)' },
+                { text: '#7c3aed', border: 'rgba(124, 58, 237, 0.4)', bar: '#7c3aed', glow: '0 10px 30px rgba(124, 58, 237, 0.15)' },
+                { text: '#d97706', border: 'rgba(217, 119, 6, 0.4)', bar: '#d97706', glow: '0 10px 30px rgba(217, 119, 6, 0.15)' },
+                { text: '#e11d48', border: 'rgba(225, 29, 72, 0.4)', bar: '#e11d48', glow: '0 10px 30px rgba(225, 29, 72, 0.15)' },
+                { text: '#0d9488', border: 'rgba(13, 148, 136, 0.4)', bar: '#0d9488', glow: '0 10px 30px rgba(13, 148, 136, 0.15)' }
+            ]
+        };
+
+        const DRIFT_ORB_CLASSES = [
+            'bg-blue-400/20 dark:bg-blue-500/15',
+            'bg-emerald-400/20 dark:bg-emerald-500/15',
+            'bg-purple-400/20 dark:bg-purple-500/15',
+            'bg-teal-400/20 dark:bg-teal-500/15'
+        ];
+
+        const burnInState = {
+            elapsed: 0,
+            lastFrameTime: null,
+            x: 0,
+            y: 0,
+            vx: 68,
+            vy: 52,
+            bounceColorIdx: 0,
+            driftOrbIdx: 0,
+            lastOrbShift: 0,
+            isHoveringCard: false,
+            idleTimer: null,
+            particles: []
+        };
+
+        const isDarkMode = () => document.documentElement.classList.contains('dark');
+
+        const initParticles = () => {
+            const w = window.innerWidth || 1024;
+            const h = window.innerHeight || 768;
+            if (els.burnInCanvas) {
+                els.burnInCanvas.width = w;
+                els.burnInCanvas.height = h;
+            }
+            const count = 65;
+            burnInState.particles = Array.from({ length: count }, () => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: 1.2 + Math.random() * 2.4,
+                vx: (Math.random() - 0.5) * 22,
+                vy: -8 - Math.random() * 18,
+                phase: Math.random() * Math.PI * 2,
+                colorSlot: Math.floor(Math.random() * 3)
+            }));
+        };
+
+        const applyBounceAccent = () => {
+            if (!appState.settings.burnInEnabled || appState.settings.burnInMode !== 'bounce') {
+                els.display.style.color = '';
+                els.display.style.textShadow = '';
+                els.mainCard.style.borderColor = '';
+                els.mainCard.style.boxShadow = '';
+                els.progressBar.style.backgroundColor = '';
+                els.brandIconBox.style.backgroundColor = '';
+                return;
+            }
+            const palette = isDarkMode() ? BOUNCE_PALETTES.dark : BOUNCE_PALETTES.light;
+            const swatch = palette[burnInState.bounceColorIdx % palette.length];
+            els.display.style.color = swatch.text;
+            els.display.style.textShadow = swatch.glow;
+            els.mainCard.style.borderColor = swatch.border;
+            els.mainCard.style.boxShadow = swatch.glow;
+            els.progressBar.style.backgroundColor = swatch.bar;
+            els.brandIconBox.style.backgroundColor = swatch.bar;
+        };
+
+        const resetIdleDimTimer = () => {
+            document.body.classList.remove('burn-in-idle');
+            if (burnInState.idleTimer) clearTimeout(burnInState.idleTimer);
+            if (appState.settings.burnInEnabled) {
+                burnInState.idleTimer = setTimeout(() => {
+                    if (appState.settings.burnInEnabled && !burnInState.isHoveringCard) {
+                        document.body.classList.add('burn-in-idle');
+                    }
+                }, 3000);
+            }
+        };
+
+        const updateToggleKnobUI = (btnEl, enabled) => {
+            if (!btnEl) return;
+            const knob = btnEl.querySelector('div');
+            if (enabled) {
+                btnEl.classList.add('bg-brand-600');
+                btnEl.classList.remove('bg-slate-300');
+                knob.classList.remove('left-1');
+                knob.classList.add('left-7');
+            } else {
+                btnEl.classList.add('bg-slate-300');
+                btnEl.classList.remove('bg-brand-600');
+                knob.classList.remove('left-7');
+                knob.classList.add('left-1');
+            }
+        };
+
+        const applyBurnInState = () => {
+            const enabled = Boolean(appState.settings.burnInEnabled);
+            const mode = VALID_BURN_IN_MODES.includes(appState.settings.burnInMode)
+                ? appState.settings.burnInMode
+                : 'drift';
+            appState.settings.burnInMode = mode;
+
+            updateToggleKnobUI(els.inputs.burnInToggle, enabled);
+            if (els.inputs.burnInMode) {
+                els.inputs.burnInMode.value = mode;
+            }
+
+            if (!enabled) {
+                document.body.classList.remove('burn-in-active', 'burn-in-idle');
+                els.burnInBackdrop.classList.add('hidden');
+                els.burnInDriftGlow.classList.replace('opacity-100', 'opacity-0');
+                els.burnInAuroraLayer.classList.replace('opacity-100', 'opacity-0');
+                els.burnInCanvas.classList.replace('opacity-100', 'opacity-0');
+                els.appContainer.style.transform = '';
+                els.burnInDriftOrb.style.transform = '';
+                els.mainCard.classList.remove('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
+                els.mainCard.classList.add('bg-white', 'dark:bg-slate-800');
+                burnInState.x = 0;
+                burnInState.y = 0;
+                burnInState.lastFrameTime = null;
+                applyBounceAccent();
+                return;
+            }
+
+            document.body.classList.add('burn-in-active');
+            els.burnInBackdrop.classList.remove('hidden');
+
+            // Toggle mode-specific backdrop layers
+            const setLayerOpacity = (el, visible) => {
+                el.classList.toggle('opacity-100', visible);
+                el.classList.toggle('opacity-0', !visible);
+            };
+            setLayerOpacity(els.burnInDriftGlow, mode === 'drift');
+            setLayerOpacity(els.burnInAuroraLayer, mode === 'aurora');
+            setLayerOpacity(els.burnInCanvas, mode === 'starfield');
+
+            // Translucent glass card in Aurora and Starfield modes
+            if (mode === 'aurora' || mode === 'starfield') {
+                els.mainCard.classList.remove('bg-white', 'dark:bg-slate-800');
+                els.mainCard.classList.add('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
+            } else {
+                els.mainCard.classList.remove('bg-white/60', 'dark:bg-slate-900/55', 'backdrop-blur-md');
+                els.mainCard.classList.add('bg-white', 'dark:bg-slate-800');
+            }
+
+            if (mode === 'starfield' && burnInState.particles.length === 0) {
+                initParticles();
+            }
+
+            applyBounceAccent();
+            resetIdleDimTimer();
+        };
+
+        const renderStarfield = (dt) => {
+            if (!els.burnInCanvas) return;
+            const ctx = els.burnInCanvas.getContext('2d');
+            if (!ctx) return;
+            const w = els.burnInCanvas.width;
+            const h = els.burnInCanvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const dark = isDarkMode();
+            const darkColors = ['186, 230, 253', '199, 210, 254', '167, 243, 208'];
+            const lightColors = ['59, 130, 246', '99, 102, 241', '14, 165, 233'];
+            const palette = dark ? darkColors : lightColors;
+
+            for (const p of burnInState.particles) {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.phase += dt * 1.8;
+
+                if (p.x < -10) p.x = w + 10;
+                if (p.x > w + 10) p.x = -10;
+                if (p.y < -10) p.y = h + 10;
+                if (p.y > h + 10) p.y = -10;
+
+                const alphaBase = dark ? 0.45 : 0.32;
+                const alpha = alphaBase + Math.sin(p.phase) * 0.22;
+                const rgb = palette[p.colorSlot % palette.length];
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${rgb}, ${Math.max(0.08, alpha)})`;
+                ctx.fill();
+            }
+        };
+
+        const stepBurnInAnimation = (timestamp) => {
+            if (!appState.settings.burnInEnabled || document.hidden) {
+                burnInState.lastFrameTime = null;
+                return;
+            }
+
+            if (burnInState.lastFrameTime === null) {
+                burnInState.lastFrameTime = timestamp;
+            }
+            const dt = Math.min(0.05, (timestamp - burnInState.lastFrameTime) / 1000);
+            burnInState.lastFrameTime = timestamp;
+
+            const mode = appState.settings.burnInMode;
+            if (mode === 'starfield') {
+                renderStarfield(dt);
+            }
+
+            // Pause card movement while user hovers over the card or has the Settings modal open
+            const modalOpen = !els.modal.classList.contains('hidden');
+            if (burnInState.isHoveringCard || modalOpen) {
+                return;
+            }
+
+            burnInState.elapsed += dt;
+            const t = burnInState.elapsed;
+
+            const cardW = els.appContainer.offsetWidth || 380;
+            const cardH = els.appContainer.offsetHeight || 420;
+            const maxX = Math.max(20, (window.innerWidth - cardW) / 2 - 16);
+            const maxY = Math.max(20, (window.innerHeight - cardH) / 2 - 16);
+
+            if (mode === 'drift') {
+                burnInState.x = Math.sin(t * 0.35) * maxX;
+                burnInState.y = Math.sin(t * 0.23) * maxY;
+                els.burnInDriftOrb.style.transform = `translate3d(${(burnInState.x * 0.6).toFixed(1)}px, ${(burnInState.y * 0.6).toFixed(1)}px, 0)`;
+
+                if (t - burnInState.lastOrbShift > 8) {
+                    burnInState.lastOrbShift = t;
+                    burnInState.driftOrbIdx = (burnInState.driftOrbIdx + 1) % DRIFT_ORB_CLASSES.length;
+                    els.burnInDriftOrb.className = `w-96 h-96 rounded-full blur-3xl transition-colors duration-1000 ${DRIFT_ORB_CLASSES[burnInState.driftOrbIdx]}`;
+                }
+            } else if (mode === 'bounce') {
+                burnInState.x += burnInState.vx * dt;
+                burnInState.y += burnInState.vy * dt;
+                let bounced = false;
+
+                if (burnInState.x >= maxX) {
+                    burnInState.x = maxX;
+                    burnInState.vx = -Math.abs(burnInState.vx);
+                    bounced = true;
+                } else if (burnInState.x <= -maxX) {
+                    burnInState.x = -maxX;
+                    burnInState.vx = Math.abs(burnInState.vx);
+                    bounced = true;
+                }
+
+                if (burnInState.y >= maxY) {
+                    burnInState.y = maxY;
+                    burnInState.vy = -Math.abs(burnInState.vy);
+                    bounced = true;
+                } else if (burnInState.y <= -maxY) {
+                    burnInState.y = -maxY;
+                    burnInState.vy = Math.abs(burnInState.vy);
+                    bounced = true;
+                }
+
+                if (bounced) {
+                    burnInState.bounceColorIdx = (burnInState.bounceColorIdx + 1) % BOUNCE_PALETTES.dark.length;
+                    applyBounceAccent();
+                }
+            } else if (mode === 'aurora') {
+                burnInState.x = Math.sin(t * 0.27) * (maxX * 0.85);
+                burnInState.y = Math.cos(t * 0.19) * (maxY * 0.85);
+            } else if (mode === 'starfield') {
+                burnInState.x = Math.cos(t * 0.29) * (maxX * 0.85);
+                burnInState.y = Math.sin(t * 0.41) * (maxY * 0.85);
+            }
+
+            els.appContainer.style.transform = `translate3d(${burnInState.x.toFixed(2)}px, ${burnInState.y.toFixed(2)}px, 0)`;
         };
 
         // --- Storage & Persistence ---
@@ -428,7 +852,9 @@ HTML_TEMPLATE = """
                 repeatCount: els.inputs.repeatCount.value,
                 repeatDelay: els.inputs.repeatDelay.value,
                 theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-                notificationsEnabled: appState.settings.notificationsEnabled
+                notificationsEnabled: appState.settings.notificationsEnabled,
+                burnInEnabled: appState.settings.burnInEnabled,
+                burnInMode: appState.settings.burnInMode
             };
             localStorage.setItem('eyeTimerSettings', JSON.stringify(data));
         };
@@ -450,13 +876,17 @@ HTML_TEMPLATE = """
                 if(data.repeatDelay) els.inputs.repeatDelay.value = data.repeatDelay;
 
                 // Apply to App State
-                appState.settings.focusTime = parseInt(data.focus) * 60;
-                appState.settings.breakTime = parseInt(data.break);
-                appState.settings.soundType = data.sound;
-                appState.settings.volume = parseInt(data.volume);
+                if (data.focus) appState.settings.focusTime = parseInt(data.focus) * 60;
+                if (data.break) appState.settings.breakTime = parseInt(data.break);
+                if (data.sound) appState.settings.soundType = data.sound;
+                if (data.volume) appState.settings.volume = parseInt(data.volume);
                 appState.settings.notificationsEnabled = data.notificationsEnabled ?? true;
-                appState.settings.repeatCount = parseInt(data.repeatCount);
-                appState.settings.repeatDelay = parseInt(data.repeatDelay);
+                if (data.repeatCount) appState.settings.repeatCount = parseInt(data.repeatCount);
+                if (data.repeatDelay) appState.settings.repeatDelay = parseInt(data.repeatDelay);
+                appState.settings.burnInEnabled = Boolean(data.burnInEnabled ?? false);
+                if (data.burnInMode && VALID_BURN_IN_MODES.includes(data.burnInMode)) {
+                    appState.settings.burnInMode = data.burnInMode;
+                }
 
                 // Apply to Audio
                 audio.setVolume(appState.settings.volume);
@@ -465,45 +895,27 @@ HTML_TEMPLATE = """
                 // Apply Theme
                 if (data.theme === 'dark') {
                     document.documentElement.classList.add('dark');
-                } else {
+                } else if (data.theme === 'light') {
                     document.documentElement.classList.remove('dark');
                 }
 
                 // Apply Notification Toggle (independent of theme)
                 const notifBtn = document.getElementById('notification-toggle');
-                const notifKnob = notifBtn.querySelector('div');
-                if (appState.settings.notificationsEnabled) {
-                    notifBtn.classList.add('bg-brand-600');
-                    notifBtn.classList.remove('bg-slate-300');
-                    notifKnob.classList.remove('left-1');
-                    notifKnob.classList.add('left-7');
-                } else {
-                    notifBtn.classList.add('bg-slate-300');
-                    notifBtn.classList.remove('bg-brand-600');
-                    notifKnob.classList.remove('left-7');
-                    notifKnob.classList.add('left-1');
-                }
+                updateToggleKnobUI(notifBtn, appState.settings.notificationsEnabled);
 
                 // Apply Reverse Toggle
                 const revBtn = document.getElementById('reverse-toggle');
-                const revKnob = revBtn.querySelector('div');
                 appState.settings.reverseOnBreakEnd = data.reverse ?? false;
-                if (appState.settings.reverseOnBreakEnd) {
-                    revBtn.classList.remove('bg-slate-300');
-                    revBtn.classList.add('bg-brand-600');
-                    revKnob.classList.remove('left-1');
-                    revKnob.classList.add('left-7');
-                } else {
-                    revBtn.classList.add('bg-slate-300');
-                    revBtn.classList.remove('bg-brand-600');
-                    revKnob.classList.remove('left-7');
-                    revKnob.classList.add('left-1');
-                }
+                updateToggleKnobUI(revBtn, appState.settings.reverseOnBreakEnd);
+
+                // Apply Dynamic Screen / Burn-In Protection
+                applyBurnInState();
             } else {
                 // If no save found, just ensure theme matches system or default
                 if (localStorage.getItem('theme') === 'light') {
                     document.documentElement.classList.remove('dark');
                 }
+                applyBurnInState();
             }
         };
 
@@ -667,6 +1079,11 @@ HTML_TEMPLATE = """
             switchPhase();
         });
 
+        // Fullscreen Button & Events
+        els.btnFullscreen.addEventListener('click', toggleFullscreen);
+        document.addEventListener('fullscreenchange', updateFullscreenUI);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+
         // Test Sound Button
         els.inputs.testBtn.addEventListener('click', () => {
             audio.resume();
@@ -703,8 +1120,10 @@ HTML_TEMPLATE = """
             appState.settings.volume = parseInt(els.inputs.volume.value);
             appState.settings.repeatCount = parseInt(els.inputs.repeatCount.value);
             appState.settings.repeatDelay = parseInt(els.inputs.repeatDelay.value);
+            appState.settings.burnInMode = els.inputs.burnInMode.value;
             
             audio.setType(appState.settings.soundType);
+            applyBurnInState();
             
             saveSettings(); // Save to LocalStorage
             resetTimer();
@@ -714,6 +1133,7 @@ HTML_TEMPLATE = """
         // Theme Toggle
         els.inputs.theme.addEventListener('click', () => {
             document.documentElement.classList.toggle('dark');
+            applyBounceAccent(); // Ensure dynamic bounce palette adapts to theme
             saveSettings(); // Save immediately on theme toggle
         });
 
@@ -722,18 +1142,7 @@ HTML_TEMPLATE = """
         notificationToggle.addEventListener('click', () => {
             const enabled = !appState.settings.notificationsEnabled;
             appState.settings.notificationsEnabled = enabled;
-            const knob = notificationToggle.querySelector('div');
-            if (enabled) {
-                notificationToggle.classList.add('bg-brand-600');
-                notificationToggle.classList.remove('bg-slate-300');
-                knob.classList.remove('left-1');
-                knob.classList.add('left-7');
-            } else {
-                notificationToggle.classList.add('bg-slate-300');
-                notificationToggle.classList.remove('bg-brand-600');
-                knob.classList.remove('left-7');
-                knob.classList.add('left-1');
-            }
+            updateToggleKnobUI(notificationToggle, enabled);
             saveSettings();
         });
 
@@ -742,24 +1151,48 @@ HTML_TEMPLATE = """
         reverseToggleBtn.addEventListener('click', () => {
             const enabled = !appState.settings.reverseOnBreakEnd;
             appState.settings.reverseOnBreakEnd = enabled;
-            const knob = reverseToggleBtn.querySelector('div');
-            if (enabled) {
-                reverseToggleBtn.classList.add('bg-brand-600');
-                reverseToggleBtn.classList.remove('bg-slate-300');
-                knob.classList.remove('left-1');
-                knob.classList.add('left-7');
-            } else {
-                reverseToggleBtn.classList.add('bg-slate-300');
-                reverseToggleBtn.classList.remove('bg-brand-600');
-                knob.classList.remove('left-7');
-                knob.classList.add('left-1');
-            }
+            updateToggleKnobUI(reverseToggleBtn, enabled);
             saveSettings();
         });
 
+        // Dynamic Screen (Anti-Burn-In) Toggle & Mode Selector
+        els.inputs.burnInToggle.addEventListener('click', () => {
+            appState.settings.burnInEnabled = !appState.settings.burnInEnabled;
+            applyBurnInState();
+            saveSettings();
+        });
+
+        els.inputs.burnInMode.addEventListener('change', (e) => {
+            const selectedMode = e.target.value;
+            if (VALID_BURN_IN_MODES.includes(selectedMode)) {
+                appState.settings.burnInMode = selectedMode;
+                applyBurnInState();
+                saveSettings();
+            }
+        });
+
+        // Card hover & activity listeners for smooth interaction during Anti-Burn-In mode
+        els.appContainer.addEventListener('mouseenter', () => {
+            burnInState.isHoveringCard = true;
+            document.body.classList.remove('burn-in-idle');
+        });
+        els.appContainer.addEventListener('mouseleave', () => {
+            burnInState.isHoveringCard = false;
+            resetIdleDimTimer();
+        });
+        window.addEventListener('mousemove', resetIdleDimTimer, { passive: true });
+        window.addEventListener('touchstart', resetIdleDimTimer, { passive: true });
+        window.addEventListener('resize', () => {
+            if (appState.settings.burnInEnabled && appState.settings.burnInMode === 'starfield') {
+                initParticles();
+            }
+        });
+
         // Init
+        initParticles();
         loadSettings(); // Load from storage
         resetTimer();   // Initialize with loaded settings
+        updateFullscreenUI();
 
         // If page visibility changes (user returns), recompute immediately
         document.addEventListener('visibilitychange', () => {
@@ -767,14 +1200,17 @@ HTML_TEMPLATE = """
             if (!document.hidden && appState.isRunning) tick();
         });
 
-        // rAF loop for smooth progress when visible; setInterval fallback handles backgrounded checks
-        const rAFLoop = () => {
+        // rAF loop for smooth progress and anti-burn-in animations when visible; setInterval fallback handles backgrounded checks
+        const rAFLoop = (timestamp) => {
             if (appState.isRunning && !document.hidden && appState.endTimeMs) {
                 // Light-weight update for progress bar and small visual smoothness
                 const remainingMs = Math.max(0, appState.endTimeMs - Date.now());
                 const remainingSec = Math.ceil(remainingMs / 1000);
                 const pct = (remainingSec / appState.totalTime) * 100;
                 els.progressBar.style.width = `${pct}%`;
+            }
+            if (appState.settings.burnInEnabled && !document.hidden) {
+                stepBurnInAnimation(timestamp);
             }
             requestAnimationFrame(rAFLoop);
         };
